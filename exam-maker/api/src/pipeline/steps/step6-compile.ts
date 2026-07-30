@@ -1,5 +1,5 @@
 import type { PipelineContext, StepResult } from '../../shared/types'
-import { COMMON_TOOLS } from '../tools'
+import { COMMON_TOOLS, handleWriteFile, handleReadFile } from '../tools'
 import fs from 'fs/promises'
 import path from 'path'
 import { execSync } from 'child_process'
@@ -60,20 +60,10 @@ export async function runStep6(ctx: PipelineContext): Promise<StepResult> {
         }
       }
       if (name === 'read_file') {
-        try {
-          const content = await fs.readFile(path.join(ctx.buildDir, input.path as string), 'utf-8')
-          return content
-        } catch (e: any) {
-          return `Error: ${e.message}`
-        }
+        return await handleReadFile(ctx.buildDir, input.path as string)
       }
       if (name === 'write_file') {
-        await fs.writeFile(
-          path.join(ctx.buildDir, input.path as string),
-          input.content as string,
-          'utf-8',
-        )
-        return `Written: ${input.path}`
+        return await handleWriteFile(ctx.buildDir, input.path as string, input.content as string)
       }
       return 'OK'
     },

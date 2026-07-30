@@ -1,5 +1,5 @@
 import type { PipelineContext, StepResult } from '../../shared/types'
-import { COMMON_TOOLS } from '../tools'
+import { COMMON_TOOLS, handleWriteFile, handleReadFile } from '../tools'
 import fs from 'fs/promises'
 import path from 'path'
 import { execSync } from 'child_process'
@@ -26,7 +26,7 @@ export async function runStep1(ctx: PipelineContext): Promise<StepResult> {
       system: getStep1SystemPrompt(ext),
       messages: [{
         role: 'user',
-        content: `解析文件 ${path.join(ctx.sessionDir, file)}，产出 LaTeX 到 ${outPath}。对于 PDF，使用 Read 工具逐页识读并转写；对于 docx，使用 execute_bash 执行 pandoc 转换。`,
+        content: `解析文件 ${path.join(ctx.sessionDir, file)}，产出 LaTeX 并写入 ${outName}。对于 PDF，使用 Read 工具逐页识读并转写；对于 docx，使用 execute_bash 执行 pandoc 转换。`,
       }],
       tools: COMMON_TOOLS,
       maxTokens: 16384,
@@ -43,20 +43,10 @@ export async function runStep1(ctx: PipelineContext): Promise<StepResult> {
           }
         }
         if (name === 'read_file') {
-          try {
-            const content = await fs.readFile(path.join(ctx.buildDir, input.path as string), 'utf-8')
-            return content
-          } catch (e: any) {
-            return `Error: ${e.message}`
-          }
+          return await handleReadFile(ctx.buildDir, input.path as string)
         }
         if (name === 'write_file') {
-          await fs.writeFile(
-            path.join(ctx.buildDir, input.path as string),
-            input.content as string,
-            'utf-8',
-          )
-          return `Written: ${input.path}`
+          return await handleWriteFile(ctx.buildDir, input.path as string, input.content as string)
         }
         return 'OK'
       },
