@@ -1,13 +1,14 @@
 import type { PipelineContext, StepResult } from '../../shared/types'
 import { COMMON_TOOLS, handleWriteFile, handleReadFile } from '../tools'
 import path from 'path'
+import fs from 'fs/promises'
 import { execSync } from 'child_process'
 
 const SYSTEM = `你是考点分析专家。依据真题 LaTeX 文件逐题判定考点、题型、分值、难度、认知层次，产出双向细目表。
 
 产物：
 1. blueprint.jsonl — 每题一行 JSON（src, no, type, points, kp, difficulty, cognition, stem_kind）
-2. blueprint.md — 人读细目表（考点×难度分值矩阵 + 考点清单 + 频次）
+2. blueprint.md — 人读细目表（考点×难度分值矩阵 + 考点清单 + 频次），用 Markdown 表格
 
 完成后调用 request_confirmation 等待教师审核。`
 
@@ -20,8 +21,6 @@ async function analyzeAndVerify(
   point: string,
   system: string,
 ): Promise<StepResult> {
-  let confirmData: unknown = null
-
   // Round 1: Analysis
   await ctx.claudeClient.sendMessage({
     system,
@@ -35,7 +34,6 @@ async function analyzeAndVerify(
       const input = rawInput as Record<string, unknown>
 
       if (name === 'request_confirmation') {
-        confirmData = input.data
         ctx.sendWs({ type: 'log', message: `⏸ 请求确认: ${input.summary}` })
         return 'CONFIRM_REQUESTED'
       }
@@ -60,12 +58,18 @@ async function analyzeAndVerify(
     onText: (text) => ctx.sendWs({ type: 'log', message: text }),
   })
 
+  // Read the produced files for confirmData
+  let mdContent = ''
+  try {
+    mdContent = await fs.readFile(path.join(ctx.buildDir, `${point}.md`), 'utf-8')
+  } catch { /* file may not exist */ }
+
   return {
     success: true,
     artifacts: [
       { name: `${point}.md`, path: path.join(ctx.buildDir, `${point}.md`) },
       { name: `${point}.jsonl`, path: path.join(ctx.buildDir, `${point}.jsonl`) },
     ],
-    confirmData,
+    confirmData: { content: mdContent, type: point },
   }
 }

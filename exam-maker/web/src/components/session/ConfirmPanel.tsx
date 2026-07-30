@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import type { BlueprintData, TemplateData } from '../../types'
 
 /* ---------- types ---------- */
 interface ConfirmPanelProps {
@@ -11,6 +10,11 @@ interface ConfirmPanelProps {
 
 type Action = 'approve' | 'reject' | 'modify'
 
+interface ConfirmContent {
+  content?: string
+  type?: string
+}
+
 /* ---------- component ---------- */
 export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: ConfirmPanelProps) {
   const [action, setAction] = useState<Action | null>(null)
@@ -18,10 +22,8 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const isBlueprint = point === 'blueprint'
-  const isTemplate = point === 'template'
-  const blueprint = isBlueprint ? (data as BlueprintData) : null
-  const template = isTemplate ? (data as TemplateData) : null
+  const confirmData = data as ConfirmContent
+  const content = confirmData?.content || ''
 
   /* which label to show */
   const titleLabels: Record<string, string> = {
@@ -56,6 +58,97 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
     }
   }
 
+  /* ---------- simple markdown renderer ---------- */
+  function renderMarkdown(md: string) {
+    const lines = md.split('\n')
+    const elements: JSX.Element[] = []
+    let inTable = false
+    let tableRows: string[][] = []
+    let tableHeader: string[] | null = null
+
+    const flushTable = () => {
+      if (tableHeader && tableRows.length > 0) {
+        elements.push(
+          <div key={`tbl-${elements.length}`} className="overflow-x-auto my-3">
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="bg-gray-50 text-gray-600">
+                  {tableHeader.map((h, i) => (
+                    <th key={i} className="text-left px-2 py-1.5 border border-gray-200">{h.trim()}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {tableRows.map((row, ri) => (
+                  <tr key={ri} className="hover:bg-gray-50">
+                    {row.map((cell, ci) => (
+                      <td key={ci} className="px-2 py-1.5 border border-gray-200 text-gray-700">{cell.trim()}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+      inTable = false
+      tableHeader = null
+      tableRows = []
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+
+      // Table detection
+      if (line.startsWith('|') && line.endsWith('|')) {
+        const cells = line.split('|').slice(1, -1).map((c) => c.trim())
+        if (!inTable) {
+          tableHeader = cells
+          inTable = true
+          continue
+        }
+        // Skip separator row (|---|---|)
+        if (cells.every((c) => /^[-:]+$/.test(c))) continue
+        tableRows.push(cells)
+        continue
+      } else {
+        if (inTable) flushTable()
+      }
+
+      // Headings
+      if (line.startsWith('# ')) {
+        elements.push(<h2 key={i} className="text-lg font-bold text-gray-900 mt-4 mb-2">{line.replace(/^# /, '')}</h2>)
+        continue
+      }
+      if (line.startsWith('## ')) {
+        elements.push(<h3 key={i} className="text-base font-semibold text-gray-800 mt-3 mb-1">{line.replace(/^## /, '')}</h3>)
+        continue
+      }
+      if (line.startsWith('### ')) {
+        elements.push(<h4 key={i} className="text-sm font-semibold text-gray-700 mt-2 mb-1">{line.replace(/^### /, '')}</h4>)
+        continue
+      }
+
+      // Empty lines
+      if (line.trim() === '') {
+        elements.push(<div key={i} className="h-2" />)
+        continue
+      }
+
+      // Regular paragraph or list item
+      elements.push(
+        <p key={i} className="text-sm text-gray-700 leading-relaxed">
+          {line.startsWith('- ') ? '• ' + line.slice(2) : line}
+        </p>,
+      )
+    }
+
+    // Flush any remaining table
+    if (inTable) flushTable()
+
+    return elements
+  }
+
   /* ---------- render ---------- */
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -64,100 +157,19 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
         <h3 className="font-semibold text-gray-900">{titleLabels[point]}</h3>
         {action && (
           <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-700">
-            {action === 'approve' ? '待提交' : action === 'reject' ? '待提交' : '待提交'}
+            待提交
           </span>
         )}
       </div>
 
-      <div className="p-5 space-y-5">
-        {/* ---- blueprint table ---- */}
-        {isBlueprint && blueprint && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs border-collapse">
-              <thead>
-                <tr className="bg-gray-50 text-gray-600">
-                  <th className="text-left px-3 py-2 border border-gray-200">知识点</th>
-                  <th className="text-center px-2 py-2 border border-gray-200">基础</th>
-                  <th className="text-center px-2 py-2 border border-gray-200">中等</th>
-                  <th className="text-center px-2 py-2 border border-gray-200">较难</th>
-                  <th className="text-center px-2 py-2 border border-gray-200">合计</th>
-                  <th className="text-center px-2 py-2 border border-gray-200">频率</th>
-                  <th className="text-center px-2 py-2 border border-gray-200">必考</th>
-                </tr>
-              </thead>
-              <tbody>
-                {blueprint.rows.map((row, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 border border-gray-200 font-medium text-gray-800">{row.kp}</td>
-                    <td className="px-2 py-2 border border-gray-200 text-center text-gray-600">{row.basic}</td>
-                    <td className="px-2 py-2 border border-gray-200 text-center text-gray-600">{row.medium}</td>
-                    <td className="px-2 py-2 border border-gray-200 text-center text-gray-600">{row.hard}</td>
-                    <td className="px-2 py-2 border border-gray-200 text-center font-medium text-gray-800">{row.total}</td>
-                    <td className="px-2 py-2 border border-gray-200 text-center text-gray-600">{row.frequency}%</td>
-                    <td className="px-2 py-2 border border-gray-200 text-center">
-                      {row.required ? (
-                        <span className="text-green-600 font-medium">是</span>
-                      ) : (
-                        <span className="text-gray-400">否</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* difficulty summary */}
-            {blueprint.difficultySummary && (
-              <div className="mt-4 flex items-center gap-4 text-xs text-gray-600">
-                <span>难度分布：</span>
-                <span className="text-green-600">基础 {blueprint.difficultySummary.basic}%</span>
-                <span className="text-blue-600">中等 {blueprint.difficultySummary.medium}%</span>
-                <span className="text-red-600">较难 {blueprint.difficultySummary.hard}%</span>
-                <span className="text-gray-400">| 总分 {blueprint.totalScore}</span>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ---- template structure ---- */}
-        {isTemplate && template && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-4 text-sm text-gray-600">
-              <span>考试时长：{template.totalTime} 分钟</span>
-              <span>页眉样式：{template.headerStyle}</span>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border-collapse">
-                <thead>
-                  <tr className="bg-gray-50 text-gray-600">
-                    <th className="text-left px-3 py-2 border border-gray-200">题型</th>
-                    <th className="text-center px-2 py-2 border border-gray-200">题数</th>
-                    <th className="text-center px-2 py-2 border border-gray-200">每题分值</th>
-                    <th className="text-center px-2 py-2 border border-gray-200">小计</th>
-                    <th className="text-left px-3 py-2 border border-gray-200">备注</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {template.sections.map((sec, i) => (
-                    <tr key={i} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 border border-gray-200 font-medium text-gray-800">{sec.type}</td>
-                      <td className="px-2 py-2 border border-gray-200 text-center text-gray-600">{sec.count}</td>
-                      <td className="px-2 py-2 border border-gray-200 text-center text-gray-600">{sec.scorePer}</td>
-                      <td className="px-2 py-2 border border-gray-200 text-center text-gray-800 font-medium">{sec.totalScore}</td>
-                      <td className="px-3 py-2 border border-gray-200 text-gray-500">{sec.notes || '-'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* ---- selection placeholder ---- */}
-        {point === 'selection' && (
-          <p className="text-sm text-gray-500">
-            请在下方选择需要保留的试卷，然后确认。
-          </p>
+      <div className="p-5 space-y-3">
+        {/* ---- content display ---- */}
+        {content ? (
+          <div className="prose prose-sm max-w-none">{renderMarkdown(content)}</div>
+        ) : point === 'selection' ? (
+          <p className="text-sm text-gray-500">请在下方选择需要保留的试卷，然后确认。</p>
+        ) : (
+          <p className="text-sm text-gray-400">等待数据加载...</p>
         )}
 
         {/* ---- error ---- */}
@@ -182,7 +194,7 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
         )}
 
         {/* ---- actions ---- */}
-        <div className="flex items-center gap-3 pt-1">
+        <div className="flex items-center gap-3 pt-2">
           {action === null ? (
             <>
               <button

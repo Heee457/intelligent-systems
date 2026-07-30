@@ -1,6 +1,8 @@
 import type { SessionStatus, WsMessage } from '../../../shared/types/index'
 import type { PipelineContext, StepResult, ClaudeClient } from '../shared/types'
 import { updateSession, getSession } from '../session/store'
+import { handleWriteFile } from './tools'
+import path from 'path'
 import { runStep0 } from './steps/step0-detect'
 import { runStep1 } from './steps/step1-parse'
 import { runStep2 } from './steps/step2-blueprint'
@@ -120,6 +122,15 @@ export class PipelineOrchestrator {
         // Handle confirmation point
         if (step.requiresConfirm && step.confirmPoint && result.confirmData) {
           const nextStatus = STATUS_AFTER_STEP[step.index]
+
+          // Persist confirmData to file so frontend can fetch it on page load
+          const confirmFile = `confirm-${step.confirmPoint}.json`
+          await handleWriteFile(
+            path.join(ctx.buildDir, '..'),
+            confirmFile,
+            JSON.stringify(result.confirmData, null, 2),
+          )
+
           await updateSession(sessionId, { status: nextStatus, stepDetail: `待确认: ${step.name}` })
           this.broadcast(sessionId, {
             type: 'confirm',

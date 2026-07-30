@@ -36,6 +36,16 @@ function wsUrl(id: string): string {
   return `ws://localhost:3001/ws/sessions/${id}`
 }
 
+async function fetchConfirmFile(sessionId: string, point: string): Promise<unknown> {
+  try {
+    const res = await fetch(`/api/sessions/${sessionId}/files/confirm-${point}.json`)
+    if (!res.ok) return null
+    return await res.json()
+  } catch {
+    return null
+  }
+}
+
 /* ---------- component ---------- */
 export default function SessionView() {
   const { id } = useParams<{ id: string }>()
@@ -83,16 +93,16 @@ export default function SessionView() {
       setFiles(data.files || [])
       setPapers(data.papers || [])
 
-      /* if status is awaiting confirmation, show the corresponding panel */
+      /* if status is awaiting confirmation, fetch confirm data from file */
       if (data.status === 'AWAIT_BLUEPRINT') {
         setConfirmPoint('blueprint')
-        setConfirmData(data.blueprint)
+        fetchConfirmFile(id, 'blueprint').then(setConfirmData)
       } else if (data.status === 'AWAIT_TEMPLATE') {
         setConfirmPoint('template')
-        setConfirmData(data.template)
+        fetchConfirmFile(id, 'template').then(setConfirmData)
       } else if (data.status === 'AWAIT_SELECTION') {
         setConfirmPoint('selection')
-        setConfirmData(data.papers)
+        fetchConfirmFile(id, 'selection').then(setConfirmData)
       }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : '未知错误')
