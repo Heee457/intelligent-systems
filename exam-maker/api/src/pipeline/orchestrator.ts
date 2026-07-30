@@ -1,6 +1,23 @@
 import type { SessionStatus, WsMessage } from '../../../shared/types/index'
 import type { PipelineContext, StepResult, ClaudeClient } from '../shared/types'
 import { updateSession, getSession } from '../session/store'
+import { runStep0 } from './steps/step0-detect'
+import { runStep1 } from './steps/step1-parse'
+import { runStep2 } from './steps/step2-blueprint'
+import { runStep3 } from './steps/step3-template'
+import { runStep4 } from './steps/step4-difficulty'
+import { runStep5 } from './steps/step5-generate'
+import { runStep6 } from './steps/step6-compile'
+
+const STEP_RUNNERS: Record<number, (ctx: PipelineContext) => Promise<StepResult>> = {
+  0: runStep0,
+  1: runStep1,
+  2: runStep2,
+  3: runStep3,
+  4: runStep4,
+  5: runStep5,
+  6: runStep6,
+}
 
 interface StepDefinition {
   index: number
@@ -52,14 +69,12 @@ export class PipelineOrchestrator {
     this.subscribers.get(sessionId)?.forEach((fn) => fn(msg))
   }
 
-  async start(sessionId: string): Promise<void> {
+  async start(sessionId: string, resumeFromStep: number = 0): Promise<void> {
     const session = await getSession(sessionId)
     if (!session) throw new Error('Session not found')
-    if (session.status !== 'CREATED') throw new Error(`Session not in CREATED state: ${session.status}`)
     if (!this.claudeClient) throw new Error('Claude client not configured')
 
     this.active.set(sessionId, true)
-    await updateSession(sessionId, { status: 'RUNNING', currentStep: 0, stepDetail: '启动管道...' })
 
     const ctx: PipelineContext = {
       sessionDir: session.workDir,
@@ -68,7 +83,8 @@ export class PipelineOrchestrator {
       claudeClient: this.claudeClient!,
     }
 
-    for (const step of STEPS) {
+    const stepsToRun = STEPS.slice(resumeFromStep)
+    for (const step of stepsToRun) {
       if (!this.active.get(sessionId)) {
         await updateSession(sessionId, { status: 'CANCELLED', stepDetail: '用户取消' })
         return
@@ -132,12 +148,11 @@ export class PipelineOrchestrator {
     step: StepDefinition,
     ctx: PipelineContext,
   ): Promise<StepResult> {
-    // Placeholder — actual step implementation comes in Tasks 6-8
-    this.broadcast(ctx.sessionDir.split('/').pop()!, {
-      type: 'log',
-      message: `[Step ${step.index}] ${step.name} — 待实现`,
-    })
-    return { success: true, artifacts: [] }
+    const runner = STEP_RUNNERS[step.index]
+    if (!runner) {
+      return { success: false, artifacts: [], error: `No runner for step ${step.index}` }
+    }
+    return runner(ctx)
   }
 
   async confirm(
@@ -150,19 +165,15 @@ export class PipelineOrchestrator {
     if (!session) throw new Error('Session not found')
 
     if (action === 'approve') {
-      // Resume pipeline from next step
+      // Continue from next step
       await updateSession(sessionId, { status: 'RUNNING' })
-      await this.resume(sessionId)
+      const nextStep = session.currentStep + 1
+      await this.start(sessionId, nextStep)
     } else if (action === 'reject' || action === 'modify') {
-      // Re-run current step with feedback
+      // Re-run current step from the beginning
       await updateSession(sessionId, { status: 'RUNNING', stepDetail: `根据反馈重新执行: ${feedback || ''}` })
-      await this.resume(sessionId)
+      await this.start(sessionId, session.currentStep)
     }
-  }
-
-  private async resume(sessionId: string): Promise<void> {
-    // Continue from currentStep
-    await this.start(sessionId) // Simplified — full impl tracks position
   }
 
   async cancel(sessionId: string): Promise<void> {
