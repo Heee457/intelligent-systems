@@ -1,6 +1,11 @@
 import Fastify from 'fastify'
 import cors from '@fastify/cors'
 
+const API_KEY = process.env.ANTHROPIC_API_KEY
+if (!API_KEY) {
+  console.warn('WARNING: ANTHROPIC_API_KEY not set. AI pipeline will not work.')
+}
+
 const app = Fastify({ logger: true })
 
 await app.register(cors, { origin: 'http://localhost:5173' })
