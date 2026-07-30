@@ -130,6 +130,10 @@ export default function SessionView() {
           case 'step':
             setCurrentStep(msg.step)
             setStepDetail(msg.detail)
+            // Pipeline is running again — clear confirm state
+            setStatus('RUNNING')
+            setConfirmPoint(null)
+            setConfirmData(null)
             break
 
           case 'log':
@@ -143,15 +147,26 @@ export default function SessionView() {
             })
             break
 
-          case 'confirm':
+          case 'confirm': {
             setConfirmPoint(msg.point)
             setConfirmData(msg.data)
+
+            // Update status to the corresponding AWAIT_ state so ConfirmPanel renders
+            const statusMap: Record<string, SessionStatus> = {
+              blueprint: 'AWAIT_BLUEPRINT',
+              template: 'AWAIT_TEMPLATE',
+              selection: 'AWAIT_SELECTION',
+            }
+            if (statusMap[msg.point]) {
+              setStatus(statusMap[msg.point])
+            }
 
             /* also store paper data when received via selection confirm */
             if (msg.point === 'selection') {
               setPapers(msg.data as PaperData[])
             }
             break
+          }
 
           case 'error':
             setError(msg.message)
