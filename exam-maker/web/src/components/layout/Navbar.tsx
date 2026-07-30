@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 
 const navItems = [
+  { to: '/', label: '🤖 AI 命题' },
   { to: '/questions', label: '题库' },
   { to: '/generator', label: '组卷' },
   { to: '/exams', label: '试卷' },
