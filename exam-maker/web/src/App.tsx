@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import Layout from './components/layout/Layout'
+import Dashboard from './routes/Dashboard'
 import QuestionBank from './routes/QuestionBank'
 import ExamGenerator from './routes/ExamGenerator'
 import ExamList from './routes/ExamList'
@@ -11,7 +12,7 @@ export default function App() {
     <BrowserRouter>
       <Routes>
         <Route element={<Layout />}>
-          <Route path="/" element={<Navigate to="/questions" replace />} />
+          <Route path="/" element={<Dashboard />} />
           <Route path="/questions" element={<QuestionBank />} />
           <Route path="/generator" element={<ExamGenerator />} />
           <Route path="/exams" element={<ExamList />} />
