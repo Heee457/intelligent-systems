@@ -36,6 +36,8 @@ export type ClaudeClient = {
     system: string
     messages: Array<{ role: 'user' | 'assistant'; content: string }>
     tools: ClaudeTool[]
+    maxTokens?: number
+    model?: string
     onToolUse: (name: string, input: unknown) => Promise<string>
     onText: (text: string) => void
   }) => Promise<string>
