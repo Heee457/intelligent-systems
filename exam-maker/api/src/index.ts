@@ -4,14 +4,20 @@ import cors from '@fastify/cors'
 import { sessionRoutes } from './routes/sessions'
 import { fileRoutes } from './routes/files'
 import { pipelineRoutes } from './routes/pipeline'
+import { bankRoutes } from './routes/bank'
 import { wsRoutes } from './routes/ws'
 import { orchestrator } from './pipeline/orchestrator'
 import { createClaudeClient } from './pipeline/claude-client'
+import { getDb } from './db/index'
 
 const API_KEY = process.env.ANTHROPIC_API_KEY
 if (!API_KEY) {
   console.warn('WARNING: ANTHROPIC_API_KEY not set. AI pipeline will not work.')
 }
+
+// Initialize database
+getDb()
+console.log('SQLite database initialized')
 
 const app = Fastify({ logger: true })
 
@@ -23,6 +29,7 @@ app.get('/api/health', async () => ({ status: 'ok' }))
 await app.register(sessionRoutes)
 await app.register(fileRoutes)
 await app.register(pipelineRoutes)
+await app.register(bankRoutes)
 await app.register(wsRoutes)
 
 // Initialize Claude client if API key is set
