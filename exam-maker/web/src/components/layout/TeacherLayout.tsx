@@ -6,7 +6,6 @@ const navItems = [
   { to: '/questions', label: '📚 题库' },
   { to: '/generator', label: '✏️ 组卷' },
   { to: '/exams', label: '📄 试卷' },
-  { to: '/history', label: '📜 历史' },
 ]
 
 export default function TeacherLayout() {

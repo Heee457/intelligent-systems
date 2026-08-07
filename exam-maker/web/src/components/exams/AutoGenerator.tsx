@@ -33,10 +33,10 @@ export default function AutoGenerator() {
     setSections(sections.filter((_, j) => j !== i))
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!name.trim() || sections.length === 0) return
-    const exam = generateExamFromRule({ name, sections, totalScore })
-    navigate(`/exams/${exam.id}`)
+    const exam = await generateExamFromRule({ name, sections, totalScore })
+    if (exam) navigate(`/exams/${exam.id}`)
   }
 
   return (

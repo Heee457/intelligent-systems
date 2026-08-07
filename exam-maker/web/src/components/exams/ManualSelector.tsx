@@ -62,12 +62,13 @@ export default function ManualSelector() {
     setSelectedQuestionIds(next)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!title.trim() || selectedQuestionIds.length === 0) return
-    const exam = createExam(title)
-    selectedQuestionIds.forEach((qid) => {
-      addQuestionToExam(exam.id, qid, scores[qid] ?? 10)
-    })
+    const exam = await createExam(title)
+    if (!exam) return
+    for (const qid of selectedQuestionIds) {
+      await addQuestionToExam(exam.id, qid, scores[qid] ?? 10)
+    }
     navigate(`/exams/${exam.id}`)
   }
 

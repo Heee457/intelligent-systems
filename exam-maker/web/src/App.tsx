@@ -10,7 +10,6 @@ import QuestionBank from './routes/QuestionBank'
 import ExamGenerator from './routes/ExamGenerator'
 import ExamList from './routes/ExamList'
 import ExamViewer from './routes/ExamViewer'
-import History from './routes/History'
 import SessionView from './routes/SessionView'
 
 export default function App() {
@@ -37,7 +36,6 @@ export default function App() {
           <Route path="/exams" element={<ExamList />} />
           <Route path="/exams/:id" element={<ExamViewer />} />
           <Route path="/session/:id" element={<SessionView />} />
-          <Route path="/history" element={<History />} />
         </Route>
 
         {/* Student routes — placeholder for Phase 3 */}

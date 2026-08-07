@@ -40,7 +40,7 @@ export default function SmartGenerator() {
     setSections(sections.filter((_, j) => j !== i))
   }
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!name.trim()) return
     const cleanSections = sections.map((s) => {
       const sec = { ...s }
@@ -48,8 +48,8 @@ export default function SmartGenerator() {
       if (!sec.knowledgePoints?.length) delete sec.knowledgePoints
       return sec
     })
-    const exam = generateExamFromRule({ name, sections: cleanSections, totalScore })
-    navigate(`/exams/${exam.id}`)
+    const exam = await generateExamFromRule({ name, sections: cleanSections, totalScore })
+    if (exam) navigate(`/exams/${exam.id}`)
   }
 
   return (

@@ -9,7 +9,7 @@ import type { ExamQuestion } from '../types'
 export default function ExamViewer() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { exams, updateExam, removeQuestionFromExam, setQuestionScore, reorderExamQuestions } = useExamStore()
+  const { exams, updateExam, removeQuestionFromExam } = useExamStore()
   const { questions } = useQuestionStore()
 
   const exam = exams.find((e) => e.id === id)
@@ -36,20 +36,30 @@ export default function ExamViewer() {
     setEditTitle(false)
   }
 
+  // 新 store 无 reorderExamQuestions/setQuestionScore，用 updateExam 组合实现
+  const saveQuestions = (questions: ExamQuestion[]) => {
+    updateExam(exam.id, { questions, totalScore: questions.reduce((sum, q) => sum + q.score, 0) })
+  }
+
   const handleMoveUp = (qid: string) => {
-    const ids = [...exam.questions].sort((a, b) => a.order - b.order).map((q) => q.questionId)
-    const idx = ids.indexOf(qid)
+    const questions = [...exam.questions].sort((a, b) => a.order - b.order)
+    const idx = questions.findIndex((q) => q.questionId === qid)
     if (idx <= 0) return
-    ;[ids[idx - 1], ids[idx]] = [ids[idx], ids[idx - 1]]
-    reorderExamQuestions(exam.id, ids)
+    ;[questions[idx - 1], questions[idx]] = [questions[idx], questions[idx - 1]]
+    saveQuestions(questions.map((q, i) => ({ ...q, order: i + 1 })))
   }
 
   const handleMoveDown = (qid: string) => {
-    const ids = [...exam.questions].sort((a, b) => a.order - b.order).map((q) => q.questionId)
-    const idx = ids.indexOf(qid)
-    if (idx < 0 || idx >= ids.length - 1) return
-    ;[ids[idx], ids[idx + 1]] = [ids[idx + 1], ids[idx]]
-    reorderExamQuestions(exam.id, ids)
+    const questions = [...exam.questions].sort((a, b) => a.order - b.order)
+    const idx = questions.findIndex((q) => q.questionId === qid)
+    if (idx < 0 || idx >= questions.length - 1) return
+    ;[questions[idx], questions[idx + 1]] = [questions[idx + 1], questions[idx]]
+    saveQuestions(questions.map((q, i) => ({ ...q, order: i + 1 })))
+  }
+
+  const handleScoreChange = (qid: string, score: number) => {
+    const questions = exam.questions.map((q) => (q.questionId === qid ? { ...q, score } : q))
+    saveQuestions(questions)
   }
 
   const handlePrint = () => {
@@ -150,7 +160,7 @@ export default function ExamViewer() {
                 <input
                   type="number"
                   value={eq.score}
-                  onChange={(e) => setQuestionScore(exam.id, q.id, Math.max(0, Number(e.target.value)))}
+                  onChange={(e) => handleScoreChange(q.id, Math.max(0, Number(e.target.value)))}
                   className="w-16 text-xs px-2 py-0.5 border border-gray-200 rounded outline-none"
                   min={0}
                 />

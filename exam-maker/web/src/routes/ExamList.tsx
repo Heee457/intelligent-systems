@@ -3,11 +3,20 @@ import { useNavigate } from 'react-router-dom'
 import { useExamStore } from '../store/examStore'
 import EmptyState from '../components/shared/EmptyState'
 import ConfirmDialog from '../components/shared/ConfirmDialog'
+import type { Exam } from '../types'
 
 export default function ExamList() {
   const navigate = useNavigate()
-  const { exams, deleteExam, duplicateExam } = useExamStore()
+  const { exams, deleteExam, createExam, updateExam } = useExamStore()
   const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  // 复制：新 store 无 duplicateExam，用 createExam + updateExam 组合实现
+  const handleDuplicate = async (exam: Exam) => {
+    const copy = await createExam(exam.title + ' (副本)')
+    if (copy) {
+      await updateExam(copy.id, { questions: exam.questions, totalScore: exam.totalScore, status: 'draft' })
+    }
+  }
 
   return (
     <div>
@@ -53,7 +62,7 @@ export default function ExamList() {
               </div>
               <div className="flex gap-2 mt-3 pt-3 border-t border-gray-50" onClick={(e) => e.stopPropagation()}>
                 <button
-                  onClick={(e) => { e.stopPropagation(); duplicateExam(exam.id) }}
+                  onClick={(e) => { e.stopPropagation(); handleDuplicate(exam) }}
                   className="text-xs px-3 py-1 text-gray-500 hover:bg-gray-100 rounded-lg"
                 >
                   复制

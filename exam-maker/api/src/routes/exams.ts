@@ -43,8 +43,19 @@ export async function examRoutes(app: FastifyInstance) {
     const db = getDb()
     const userId = (req as AuthRequest).user.userId
 
+    // Partial updates (frontend sends only changed fields, e.g. { status } or { questions, totalScore }):
+    // merge with the existing row instead of wiping the untouched columns to NULL/empty.
+    const existing = db.prepare('SELECT * FROM exams WHERE id = ? AND teacher_id = ?').get(id, userId) as any
+    if (!existing) return reply.status(404).send({ error: 'Not found' })
+    const merged = {
+      title: body.title !== undefined ? body.title : existing.title,
+      questions: body.questions !== undefined ? body.questions : JSON.parse(existing.questions),
+      totalScore: body.totalScore !== undefined ? body.totalScore : existing.total_score,
+      status: body.status !== undefined ? body.status : existing.status,
+    }
+
     const result = db.prepare('UPDATE exams SET title=?, questions=?, total_score=?, status=?, updated_at=? WHERE id=? AND teacher_id=?').run(
-      body.title, JSON.stringify(body.questions || []), body.totalScore || 0, body.status || 'draft', Date.now(), id, userId
+      merged.title, JSON.stringify(merged.questions), merged.totalScore, merged.status, Date.now(), id, userId
     )
     if (result.changes === 0) return reply.status(404).send({ error: 'Not found' })
 
