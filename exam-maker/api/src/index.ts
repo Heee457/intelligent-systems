@@ -11,6 +11,7 @@ import { questionRoutes } from './routes/questions'
 import { examRoutes } from './routes/exams'
 import { classRoutes } from './routes/classes'
 import { publishRoutes } from './routes/publish'
+import { studentRoutes } from './routes/student'
 import { orchestrator } from './pipeline/orchestrator'
 import { createClaudeClient } from './pipeline/claude-client'
 import { getDb } from './db/index'
@@ -40,6 +41,7 @@ await app.register(questionRoutes)
 await app.register(examRoutes)
 await app.register(classRoutes)
 await app.register(publishRoutes)
+await app.register(studentRoutes)
 await app.register(wsRoutes)
 
 // Initialize Claude client if API key is set
