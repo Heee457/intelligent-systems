@@ -1,10 +1,13 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useExamStore } from '../store/examStore'
 import { useQuestionStore } from '../store/questionStore'
+import { useAuthStore } from '../store/authStore'
 import { useState } from 'react'
 import Modal from '../components/shared/Modal'
 import QuestionForm from '../components/questions/QuestionForm'
 import type { ExamQuestion } from '../types'
+
+const API = 'http://localhost:3001'
 
 export default function ExamViewer() {
   const { id } = useParams<{ id: string }>()
@@ -17,6 +20,12 @@ export default function ExamViewer() {
   const [editTitle, setEditTitle] = useState(false)
   const [title, setTitle] = useState(exam?.title ?? '')
   const [editingQId, setEditingQId] = useState<string | null>(null)
+
+  // 发布弹窗状态
+  const [showPublish, setShowPublish] = useState(false)
+  const [publishTitle, setPublishTitle] = useState(exam?.title ?? '')
+  const [publishDuration, setPublishDuration] = useState('')
+  const [shuffleQuestions, setShuffleQuestions] = useState(false)
 
   if (!exam) {
     return (
@@ -66,6 +75,31 @@ export default function ExamViewer() {
     window.print()
   }
 
+  const handlePublish = async () => {
+    if (!publishTitle.trim() || !publishDuration) {
+      alert('请填写发布标题和考试时长')
+      return
+    }
+    const token = useAuthStore.getState().token
+    const res = await fetch(`${API}/api/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        examId: exam.id,
+        title: publishTitle.trim(),
+        duration: Number(publishDuration),
+        shuffle: shuffleQuestions,
+      }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => null)
+      alert(data?.error || '发布失败')
+      return
+    }
+    await updateExam(exam.id, { status: 'published' })
+    setShowPublish(false)
+  }
+
   const sortedQuestions = [...exam.questions].sort((a, b) => a.order - b.order)
 
   const DIFF_LABELS: Record<string, string> = { easy: '简单', medium: '中等', hard: '困难' }
@@ -93,7 +127,7 @@ export default function ExamViewer() {
         )}
         <div className="flex gap-2">
           {exam.status === 'draft' ? (
-            <button onClick={() => updateExam(exam.id, { status: 'published' })} className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600">
+            <button onClick={() => setShowPublish(true)} className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600">
               发布
             </button>
           ) : (
@@ -180,6 +214,38 @@ export default function ExamViewer() {
           />
         )}
       </Modal>
+
+      {/* 发布弹窗 */}
+      {showPublish && (
+        <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md space-y-4">
+            <h3 className="font-semibold text-lg">发布试卷</h3>
+            <input
+              value={publishTitle}
+              onChange={(e) => setPublishTitle(e.target.value)}
+              placeholder="发布标题"
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+            <input
+              type="number"
+              value={publishDuration}
+              onChange={(e) => setPublishDuration(e.target.value)}
+              placeholder="考试时长（分钟）"
+              min={1}
+              className="w-full px-3 py-2 border rounded-lg text-sm"
+            />
+            <div className="flex gap-2">
+              <label className="flex items-center gap-1 text-sm">
+                <input type="checkbox" checked={shuffleQuestions} onChange={(e) => setShuffleQuestions(e.target.checked)} /> 打乱题目顺序
+              </label>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowPublish(false)} className="px-4 py-1.5 border rounded-lg text-sm">取消</button>
+              <button onClick={handlePublish} className="px-4 py-1.5 bg-green-500 text-white rounded-lg text-sm">确认发布</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

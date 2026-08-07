@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuestionStore } from '../store/questionStore'
 import type { QuestionType, Difficulty } from '../types'
 import QuestionList from '../components/questions/QuestionList'
@@ -10,8 +10,11 @@ import EmptyState from '../components/shared/EmptyState'
 export default function QuestionBank() {
   const {
     questions, deleteQuestion, deleteQuestions,
-    exportQuestions, importQuestions, batchSetDifficulty,
+    exportQuestions, importQuestions, batchSetDifficulty, fetchQuestions,
   } = useQuestionStore()
+
+  // 挂载时从 API 加载题库
+  useEffect(() => { fetchQuestions() }, [])
 
   // 筛选状态
   const [filterType, setFilterType] = useState<QuestionType | ''>('')

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useExamStore } from '../store/examStore'
 import EmptyState from '../components/shared/EmptyState'
@@ -7,8 +7,11 @@ import type { Exam } from '../types'
 
 export default function ExamList() {
   const navigate = useNavigate()
-  const { exams, deleteExam, createExam, updateExam } = useExamStore()
+  const { exams, deleteExam, createExam, updateExam, fetchExams } = useExamStore()
   const [deleteId, setDeleteId] = useState<string | null>(null)
+
+  // 挂载时从 API 加载试卷列表
+  useEffect(() => { fetchExams() }, [])
 
   // 复制：新 store 无 duplicateExam，用 createExam + updateExam 组合实现
   const handleDuplicate = async (exam: Exam) => {
