@@ -13,6 +13,10 @@ import ExamViewer from './routes/ExamViewer'
 import SessionView from './routes/SessionView'
 import ClassList from './routes/ClassList'
 import ClassDetail from './routes/ClassDetail'
+import StudentDashboard from './routes/student/StudentDashboard'
+import ExamTaking from './routes/student/ExamTaking'
+import StudentGrades from './routes/student/StudentGrades'
+import SubmissionDetail from './routes/student/SubmissionDetail'
 
 export default function App() {
   return (
@@ -42,7 +46,7 @@ export default function App() {
           <Route path="/classes/:id" element={<ClassDetail />} />
         </Route>
 
-        {/* Student routes — placeholder for Phase 3 */}
+        {/* Student routes */}
         <Route
           element={
             <ProtectedRoute role="student">
@@ -50,17 +54,12 @@ export default function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/student/dashboard" element={<StudentPlaceholder />} />
+          <Route path="/student/dashboard" element={<StudentDashboard />} />
+          <Route path="/student/exam/:publishId" element={<ExamTaking />} />
+          <Route path="/student/grades" element={<StudentGrades />} />
+          <Route path="/student/submission/:id" element={<SubmissionDetail />} />
         </Route>
       </Routes>
     </BrowserRouter>
-  )
-}
-
-function StudentPlaceholder() {
-  return (
-    <div className="text-center py-24 text-gray-400 text-sm">
-      🎓 学生端即将上线
-    </div>
   )
 }
