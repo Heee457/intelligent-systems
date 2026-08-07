@@ -6,6 +6,7 @@ import { fileRoutes } from './routes/files'
 import { pipelineRoutes } from './routes/pipeline'
 import { bankRoutes } from './routes/bank'
 import { wsRoutes } from './routes/ws'
+import { authRoutes } from './routes/auth'
 import { orchestrator } from './pipeline/orchestrator'
 import { createClaudeClient } from './pipeline/claude-client'
 import { getDb } from './db/index'
@@ -26,6 +27,7 @@ await app.register(cors, { origin: 'http://localhost:5173' })
 app.get('/api/health', async () => ({ status: 'ok' }))
 
 // Register all route modules
+await app.register(authRoutes)
 await app.register(sessionRoutes)
 await app.register(fileRoutes)
 await app.register(pipelineRoutes)
