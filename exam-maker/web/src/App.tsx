@@ -13,6 +13,9 @@ import ExamViewer from './routes/ExamViewer'
 import SessionView from './routes/SessionView'
 import ClassList from './routes/ClassList'
 import ClassDetail from './routes/ClassDetail'
+import ExamAnalysis from './routes/ExamAnalysis'
+import GradingCenter from './routes/GradingCenter'
+import StudentDetail from './routes/StudentDetail'
 import StudentDashboard from './routes/student/StudentDashboard'
 import ExamTaking from './routes/student/ExamTaking'
 import StudentGrades from './routes/student/StudentGrades'
@@ -44,6 +47,9 @@ export default function App() {
           <Route path="/session/:id" element={<SessionView />} />
           <Route path="/classes" element={<ClassList />} />
           <Route path="/classes/:id" element={<ClassDetail />} />
+          <Route path="/exams/:id/analysis" element={<ExamAnalysis />} />
+          <Route path="/grading" element={<GradingCenter />} />
+          <Route path="/students/:id" element={<StudentDetail />} />
         </Route>
 
         {/* Student routes */}
