@@ -12,6 +12,7 @@ import { examRoutes } from './routes/exams'
 import { classRoutes } from './routes/classes'
 import { exportRoutes } from './routes/export'
 import { publishRoutes } from './routes/publish'
+import { variantRoutes } from './routes/variant'
 import { studentRoutes } from './routes/student'
 import { statsRoutes } from './routes/stats'
 import { orchestrator } from './pipeline/orchestrator'
@@ -44,6 +45,7 @@ await app.register(examRoutes)
 await app.register(classRoutes)
 await app.register(exportRoutes)
 await app.register(publishRoutes)
+await app.register(variantRoutes)
 await app.register(studentRoutes)
 await app.register(statsRoutes)
 await app.register(wsRoutes)

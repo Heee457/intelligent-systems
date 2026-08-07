@@ -89,6 +89,7 @@ function runMigrations(db: Database.Database) {
       shuffle     INTEGER DEFAULT 0,
       retry       INTEGER DEFAULT 0,
       status      TEXT DEFAULT 'draft',
+      variant     TEXT,
       created_at  INTEGER NOT NULL
     );
 
@@ -161,4 +162,11 @@ function runMigrations(db: Database.Database) {
       created_at         INTEGER NOT NULL
     );
   `)
+
+  // Migration: add `variant` column to exam_publish for pre-existing databases
+  // (CREATE TABLE IF NOT EXISTS does not alter existing tables)
+  const publishCols = db.prepare('PRAGMA table_info(exam_publish)').all() as { name: string }[]
+  if (!publishCols.some((c) => c.name === 'variant')) {
+    db.exec('ALTER TABLE exam_publish ADD COLUMN variant TEXT')
+  }
 }
