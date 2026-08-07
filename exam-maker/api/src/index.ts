@@ -7,6 +7,7 @@ import { pipelineRoutes } from './routes/pipeline'
 import { bankRoutes } from './routes/bank'
 import { wsRoutes } from './routes/ws'
 import { authRoutes } from './routes/auth'
+import { questionRoutes } from './routes/questions'
 import { orchestrator } from './pipeline/orchestrator'
 import { createClaudeClient } from './pipeline/claude-client'
 import { getDb } from './db/index'
@@ -32,6 +33,7 @@ await app.register(sessionRoutes)
 await app.register(fileRoutes)
 await app.register(pipelineRoutes)
 await app.register(bankRoutes)
+await app.register(questionRoutes)
 await app.register(wsRoutes)
 
 // Initialize Claude client if API key is set
