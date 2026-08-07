@@ -91,5 +91,33 @@ function runMigrations(db: Database.Database) {
       status      TEXT DEFAULT 'draft',
       created_at  INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS submissions (
+      id            TEXT PRIMARY KEY,
+      publish_id    TEXT NOT NULL REFERENCES exam_publish(id),
+      student_id    TEXT NOT NULL REFERENCES users(id),
+      status        TEXT DEFAULT 'started',
+      answers       TEXT,
+      total_score   REAL,
+      total_points  REAL,
+      violations    INTEGER DEFAULT 0,
+      started_at    INTEGER NOT NULL,
+      submitted_at  INTEGER,
+      graded_at     INTEGER,
+      grader_id     TEXT REFERENCES users(id),
+      grade_notes   TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS submission_answers (
+      id              TEXT PRIMARY KEY,
+      submission_id   TEXT NOT NULL REFERENCES submissions(id),
+      question_id     TEXT NOT NULL,
+      question_order  INTEGER NOT NULL,
+      answer          TEXT,
+      score           REAL,
+      max_score       REAL,
+      is_correct      INTEGER,
+      graded_by       TEXT DEFAULT 'auto'
+    );
   `)
 }
