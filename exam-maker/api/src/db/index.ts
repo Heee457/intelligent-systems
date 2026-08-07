@@ -119,5 +119,46 @@ function runMigrations(db: Database.Database) {
       is_correct      INTEGER,
       graded_by       TEXT DEFAULT 'auto'
     );
+
+    CREATE TABLE IF NOT EXISTS exam_stats (
+      publish_id     TEXT PRIMARY KEY REFERENCES exam_publish(id),
+      student_count  INTEGER NOT NULL,
+      avg_score      REAL,
+      median_score   REAL,
+      max_score      REAL,
+      min_score      REAL,
+      pass_count     INTEGER,
+      pass_rate      REAL,
+      score_dist     TEXT,
+      computed_at    INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS question_stats (
+      publish_id      TEXT NOT NULL REFERENCES exam_publish(id),
+      question_id     TEXT NOT NULL,
+      correct_count   INTEGER DEFAULT 0,
+      wrong_count     INTEGER DEFAULT 0,
+      blank_count     INTEGER DEFAULT 0,
+      correct_rate    REAL,
+      discrimination  REAL,
+      PRIMARY KEY (publish_id, question_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS exam_variant_assign (
+      publish_id  TEXT NOT NULL REFERENCES exam_publish(id),
+      student_id  TEXT NOT NULL REFERENCES users(id),
+      variant     TEXT NOT NULL,
+      PRIMARY KEY (publish_id, student_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS makeup_exams (
+      id                 TEXT PRIMARY KEY,
+      original_publish_id TEXT NOT NULL REFERENCES exam_publish(id),
+      student_id         TEXT NOT NULL REFERENCES users(id),
+      publish_id         TEXT REFERENCES exam_publish(id),
+      reason             TEXT,
+      status             TEXT DEFAULT 'pending',
+      created_at         INTEGER NOT NULL
+    );
   `)
 }
