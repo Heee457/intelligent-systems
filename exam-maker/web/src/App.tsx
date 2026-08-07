@@ -11,6 +11,8 @@ import ExamGenerator from './routes/ExamGenerator'
 import ExamList from './routes/ExamList'
 import ExamViewer from './routes/ExamViewer'
 import SessionView from './routes/SessionView'
+import ClassList from './routes/ClassList'
+import ClassDetail from './routes/ClassDetail'
 
 export default function App() {
   return (
@@ -36,6 +38,8 @@ export default function App() {
           <Route path="/exams" element={<ExamList />} />
           <Route path="/exams/:id" element={<ExamViewer />} />
           <Route path="/session/:id" element={<SessionView />} />
+          <Route path="/classes" element={<ClassList />} />
+          <Route path="/classes/:id" element={<ClassDetail />} />
         </Route>
 
         {/* Student routes — placeholder for Phase 3 */}
