@@ -9,7 +9,7 @@ import EmptyState from '../components/shared/EmptyState'
 
 export default function QuestionBank() {
   const {
-    questions, getFilteredQuestions, deleteQuestion, deleteQuestions,
+    questions, deleteQuestion, deleteQuestions,
     exportQuestions, importQuestions, batchSetDifficulty,
   } = useQuestionStore()
 
@@ -28,16 +28,21 @@ export default function QuestionBank() {
   const [editingQuestion, setEditingQuestion] = useState<string | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
 
-  // 计算过滤后的题目
-  const filteredQuestions = useMemo(
-    () => getFilteredQuestions({
-      type: filterType || undefined,
-      difficulty: filterDifficulty || undefined,
-      knowledgePoint: filterKnowledgePoint || undefined,
-      keyword: filterKeyword || undefined,
-    }),
-    [questions, filterType, filterDifficulty, filterKeyword, filterKnowledgePoint, getFilteredQuestions],
-  )
+  // 计算过滤后的题目（客户端过滤；服务端过滤可通过 fetchQuestions(filter) 实现）
+  const filteredQuestions = useMemo(() => {
+    let result = questions
+    if (filterType) result = result.filter((q) => q.type === filterType)
+    if (filterDifficulty) result = result.filter((q) => q.difficulty === filterDifficulty)
+    if (filterKnowledgePoint)
+      result = result.filter((q) => q.knowledgePoints.some((kp) => kp.includes(filterKnowledgePoint)))
+    if (filterKeyword) {
+      const kw = filterKeyword.toLowerCase()
+      result = result.filter(
+        (q) => q.title.toLowerCase().includes(kw) || q.content.toLowerCase().includes(kw),
+      )
+    }
+    return result
+  }, [questions, filterType, filterDifficulty, filterKeyword, filterKnowledgePoint])
 
   const selectedQuestion = editingQuestion
     ? questions.find((q) => q.id === editingQuestion) ?? null
@@ -57,8 +62,8 @@ export default function QuestionBank() {
       const file = (e.target as HTMLInputElement).files?.[0]
       if (!file) return
       const reader = new FileReader()
-      reader.onload = () => {
-        const count = importQuestions(reader.result as string)
+      reader.onload = async () => {
+        const count = await importQuestions(reader.result as string)
         alert(`成功导入 ${count} 道题目`)
       }
       reader.readAsText(file)
@@ -66,8 +71,9 @@ export default function QuestionBank() {
     input.click()
   }
 
-  const handleExport = () => {
-    const blob = new Blob([exportQuestions()], { type: 'application/json' })
+  const handleExport = async () => {
+    const json = await exportQuestions()
+    const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url

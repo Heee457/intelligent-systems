@@ -1,7 +1,6 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import type { Question, QuestionType, Difficulty } from '../types'
-import { generateId } from '../utils/id'
+import { useAuthStore } from './authStore'
 
 interface QuestionFilter {
   type?: QuestionType
@@ -12,109 +11,104 @@ interface QuestionFilter {
 
 interface QuestionState {
   questions: Question[]
+  loading: boolean
+  error: string | null
 
-  // CRUD
-  addQuestion: (q: Omit<Question, 'id' | 'createdAt' | 'updatedAt'>) => Question
-  updateQuestion: (id: string, data: Partial<Question>) => void
-  deleteQuestion: (id: string) => void
-  deleteQuestions: (ids: string[]) => void
-  getQuestion: (id: string) => Question | undefined
-
-  // 批量修改
-  batchSetDifficulty: (ids: string[], difficulty: Difficulty) => void
-  batchAddKnowledgePoint: (ids: string[], kp: string) => void
-  batchRemoveKnowledgePoint: (ids: string[], kp: string) => void
-
-  // 过滤搜索
-  getFilteredQuestions: (filter: QuestionFilter) => Question[]
-
-  // 导入导出
-  exportQuestions: () => string
-  importQuestions: (json: string) => number
+  fetchQuestions: (filter?: QuestionFilter) => Promise<void>
+  addQuestion: (q: Omit<Question, 'id' | 'createdAt' | 'updatedAt'>) => Promise<Question | null>
+  updateQuestion: (id: string, data: Partial<Question>) => Promise<void>
+  deleteQuestion: (id: string) => Promise<void>
+  deleteQuestions: (ids: string[]) => Promise<void>
+  batchSetDifficulty: (ids: string[], difficulty: Difficulty) => Promise<void>
+  importQuestions: (json: string) => Promise<number>
+  exportQuestions: () => Promise<string>
 }
 
-export const useQuestionStore = create<QuestionState>()(
-  persist(
-    (set, get) => ({
-      questions: [],
+const API = 'http://localhost:3001'
 
-      addQuestion: (q) => {
-        const now = Date.now()
-        const question: Question = { ...q, id: generateId(), createdAt: now, updatedAt: now }
-        set((s) => ({ questions: [...s.questions, question] }))
-        return question
-      },
+function headers() {
+  const token = useAuthStore.getState().token
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }
+}
 
-      updateQuestion: (id, data) =>
-        set((s) => ({
-          questions: s.questions.map((q) =>
-            q.id === id ? { ...q, ...data, updatedAt: Date.now() } : q,
-          ),
-        })),
+export const useQuestionStore = create<QuestionState>()((set, get) => ({
+  questions: [],
+  loading: false,
+  error: null,
 
-      deleteQuestion: (id) =>
-        set((s) => ({ questions: s.questions.filter((q) => q.id !== id) })),
+  fetchQuestions: async (filter) => {
+    set({ loading: true, error: null })
+    try {
+      const params = new URLSearchParams()
+      if (filter?.type) params.set('type', filter.type)
+      if (filter?.difficulty) params.set('difficulty', filter.difficulty)
+      if (filter?.knowledgePoint) params.set('kp', filter.knowledgePoint)
+      if (filter?.keyword) params.set('keyword', filter.keyword)
 
-      deleteQuestions: (ids) =>
-        set((s) => ({ questions: s.questions.filter((q) => !ids.includes(q.id)) })),
+      const res = await fetch(`${API}/api/questions?${params}`, { headers: headers() })
+      if (!res.ok) throw new Error('Failed to fetch')
+      const data = await res.json()
+      set({ questions: data.questions, loading: false })
+    } catch (err) {
+      set({ error: (err as Error).message, loading: false })
+    }
+  },
 
-      getQuestion: (id) => get().questions.find((q) => q.id === id),
+  addQuestion: async (q) => {
+    const res = await fetch(`${API}/api/questions`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify(q),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    set((s) => ({ questions: [data.question, ...s.questions] }))
+    return data.question
+  },
 
-      batchSetDifficulty: (ids, difficulty) =>
-        set((s) => ({
-          questions: s.questions.map((q) =>
-            ids.includes(q.id) ? { ...q, difficulty, updatedAt: Date.now() } : q,
-          ),
-        })),
+  updateQuestion: async (id, data) => {
+    await fetch(`${API}/api/questions/${id}`, {
+      method: 'PUT', headers: headers(),
+      body: JSON.stringify(data),
+    })
+    set((s) => ({ questions: s.questions.map((q) => q.id === id ? { ...q, ...data, updatedAt: Date.now() } : q) }))
+  },
 
-      batchAddKnowledgePoint: (ids, kp) =>
-        set((s) => ({
-          questions: s.questions.map((q) =>
-            ids.includes(q.id) && !q.knowledgePoints.includes(kp)
-              ? { ...q, knowledgePoints: [...q.knowledgePoints, kp], updatedAt: Date.now() }
-              : q,
-          ),
-        })),
+  deleteQuestion: async (id) => {
+    await fetch(`${API}/api/questions/${id}`, { method: 'DELETE', headers: headers() })
+    set((s) => ({ questions: s.questions.filter((q) => q.id !== id) }))
+  },
 
-      batchRemoveKnowledgePoint: (ids, kp) =>
-        set((s) => ({
-          questions: s.questions.map((q) =>
-            ids.includes(q.id)
-              ? { ...q, knowledgePoints: q.knowledgePoints.filter((p) => p !== kp), updatedAt: Date.now() }
-              : q,
-          ),
-        })),
+  deleteQuestions: async (ids) => {
+    for (const id of ids) {
+      await fetch(`${API}/api/questions/${id}`, { method: 'DELETE', headers: headers() })
+    }
+    set((s) => ({ questions: s.questions.filter((q) => !ids.includes(q.id)) }))
+  },
 
-      getFilteredQuestions: (filter) => {
-        let result = get().questions
-        if (filter.type) result = result.filter((q) => q.type === filter.type)
-        if (filter.difficulty) result = result.filter((q) => q.difficulty === filter.difficulty)
-        if (filter.knowledgePoint)
-          result = result.filter((q) =>
-            q.knowledgePoints.some((kp) => kp.includes(filter.knowledgePoint!)),
-          )
-        if (filter.keyword) {
-          const kw = filter.keyword.toLowerCase()
-          result = result.filter(
-            (q) =>
-              q.title.toLowerCase().includes(kw) || q.content.toLowerCase().includes(kw),
-          )
-        }
-        return result
-      },
+  batchSetDifficulty: async (ids, difficulty) => {
+    for (const id of ids) {
+      await fetch(`${API}/api/questions/${id}`, {
+        method: 'PUT', headers: headers(),
+        body: JSON.stringify({ difficulty }),
+      })
+    }
+    set((s) => ({ questions: s.questions.map((q) => ids.includes(q.id) ? { ...q, difficulty } : q) }))
+  },
 
-      exportQuestions: () => JSON.stringify(get().questions, null, 2),
+  importQuestions: async (json) => {
+    const parsed = JSON.parse(json)
+    const res = await fetch(`${API}/api/questions/import`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ questions: Array.isArray(parsed) ? parsed : parsed.questions }),
+    })
+    const data = await res.json()
+    get().fetchQuestions()
+    return data.imported
+  },
 
-      importQuestions: (json) => {
-        const parsed = JSON.parse(json) as Question[]
-        set((s) => {
-          const existingIds = new Set(s.questions.map((q) => q.id))
-          const newQuestions = parsed.filter((q) => !existingIds.has(q.id))
-          return { questions: [...s.questions, ...newQuestions] }
-        })
-        return parsed.filter((q) => !get().questions.map((x) => x.id).includes(q.id)).length
-      },
-    }),
-    { name: 'exam-maker-questions' },
-  ),
-)
+  exportQuestions: async () => {
+    const res = await fetch(`${API}/api/questions/export`, { headers: headers() })
+    const data = await res.json()
+    return JSON.stringify(data, null, 2)
+  },
+}))

@@ -6,7 +6,7 @@ import type { QuestionType, Difficulty } from '../../types'
 
 export default function ManualSelector() {
   const navigate = useNavigate()
-  const { questions, getFilteredQuestions } = useQuestionStore()
+  const { questions } = useQuestionStore()
   const { createExam, addQuestionToExam } = useExamStore()
 
   const [title, setTitle] = useState('')
@@ -18,10 +18,18 @@ export default function ManualSelector() {
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([])
   const [scores, setScores] = useState<Record<string, number>>({})
 
-  const filtered = useMemo(
-    () => getFilteredQuestions({ type: filterType || undefined, difficulty: filterDifficulty || undefined, keyword: filterKeyword || undefined }),
-    [questions, filterType, filterDifficulty, filterKeyword, getFilteredQuestions],
-  )
+  const filtered = useMemo(() => {
+    let result = questions
+    if (filterType) result = result.filter((q) => q.type === filterType)
+    if (filterDifficulty) result = result.filter((q) => q.difficulty === filterDifficulty)
+    if (filterKeyword) {
+      const kw = filterKeyword.toLowerCase()
+      result = result.filter(
+        (q) => q.title.toLowerCase().includes(kw) || q.content.toLowerCase().includes(kw),
+      )
+    }
+    return result
+  }, [questions, filterType, filterDifficulty, filterKeyword])
 
   const totalScore = selectedQuestionIds.reduce((sum, id) => sum + (scores[id] ?? 10), 0)
   const availableQuestions = filtered.filter((q) => !selectedQuestionIds.includes(q.id))
