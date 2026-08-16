@@ -7,3 +7,7 @@ shared/dist/
 .env
 *.env
 .env.local
+.e2e-data/
+test-results/
+playwright-report/
+blob-report/

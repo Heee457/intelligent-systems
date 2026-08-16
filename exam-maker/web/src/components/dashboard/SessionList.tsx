@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Session, SessionStatus } from '../../types'
+import { useAuthStore } from '../../store/authStore'
 import EmptyState from '../shared/EmptyState'
 
 const STATUS_LABELS: Record<SessionStatus, string> = {
@@ -41,7 +42,10 @@ export default function SessionList() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch('/api/sessions')
+      const token = useAuthStore.getState().token
+      const res = await fetch('/api/sessions', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
       if (!res.ok) {
         throw new Error(`请求失败 (${res.status})`)
       }

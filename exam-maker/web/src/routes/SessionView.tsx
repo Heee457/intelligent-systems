@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { Session, SessionFile, SessionStatus, WsMessage, PaperData } from '../types'
+import { useAuthStore } from '../store/authStore'
+import { useQuestionStore } from '../store/questionStore'
 import ProgressBar from '../components/session/ProgressBar'
 import StepLog, { type LogEntry } from '../components/session/StepLog'
 import ConfirmPanel from '../components/session/ConfirmPanel'
@@ -36,9 +38,11 @@ function wsUrl(id: string): string {
   return `ws://localhost:3001/ws/sessions/${id}`
 }
 
-async function fetchConfirmFile(sessionId: string, point: string): Promise<unknown> {
+async function fetchConfirmFile(sessionId: string, point: string, token?: string): Promise<unknown> {
   try {
-    const res = await fetch(`/api/sessions/${sessionId}/files/confirm-${point}.json`)
+    const res = await fetch(`/api/sessions/${sessionId}/files/confirm-${point}.json`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
     if (!res.ok) return null
     return await res.json()
   } catch {
@@ -77,7 +81,10 @@ export default function SessionView() {
     setLoading(true)
     setFetchError(null)
     try {
-      const res = await fetch(`/api/sessions/${id}`)
+      const token = useAuthStore.getState().token
+      const res = await fetch(`/api/sessions/${id}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
       if (!res.ok) {
         if (res.status === 404) {
           navigateRef.current('/')
@@ -94,15 +101,22 @@ export default function SessionView() {
       setPapers(data.papers || [])
 
       /* if status is awaiting confirmation, fetch confirm data from file */
+      const t = useAuthStore.getState().token
       if (data.status === 'AWAIT_BLUEPRINT') {
         setConfirmPoint('blueprint')
-        fetchConfirmFile(id, 'blueprint').then(setConfirmData)
+        fetchConfirmFile(id, 'blueprint', t ?? undefined).then(setConfirmData)
       } else if (data.status === 'AWAIT_TEMPLATE') {
         setConfirmPoint('template')
-        fetchConfirmFile(id, 'template').then(setConfirmData)
+        fetchConfirmFile(id, 'template', t ?? undefined).then(setConfirmData)
       } else if (data.status === 'AWAIT_SELECTION') {
         setConfirmPoint('selection')
-        fetchConfirmFile(id, 'selection').then(setConfirmData)
+        fetchConfirmFile(id, 'selection', t ?? undefined).then((fileData) => {
+          setConfirmData(fileData)
+          // Also populate papers from confirm file (session store may not have them)
+          if (Array.isArray(fileData) && fileData.length > 0) {
+            setPapers(fileData as PaperData[])
+          }
+        })
       }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : '未知错误')
@@ -214,9 +228,37 @@ export default function SessionView() {
     fetchSession()
   }, [fetchSession])
 
+  /* ---------- import to question bank ---------- */
+  const { importQuestions } = useQuestionStore()
+  const [importingBank, setImportingBank] = useState(false)
+  const [bankImportMsg, setBankImportMsg] = useState<string | null>(null)
+
+  const handleImportToBank = useCallback(async () => {
+    if (!id) return
+    setImportingBank(true)
+    setBankImportMsg(null)
+    try {
+      const res = await fetch(`/api/sessions/${id}/bank-questions`)
+      if (!res.ok) throw new Error(`请求失败 (${res.status})`)
+      const data = await res.json()
+      if (!data.questions || data.questions.length === 0) {
+        setBankImportMsg('该会话没有可导入的题目')
+        return
+      }
+      const count = importQuestions(JSON.stringify(data.questions))
+      setBankImportMsg(`成功导入 ${count} 道题目到题库`)
+    } catch (err) {
+      setBankImportMsg(err instanceof Error ? err.message : '导入失败')
+    } finally {
+      setImportingBank(false)
+    }
+  }, [id, importQuestions])
+
   /* ---------- derived state ---------- */
   const awaitingConfirm = confirmPoint !== null && status.startsWith('AWAIT_')
-  const showConfirmPanel = awaitingConfirm && confirmData != null
+  // Always show confirm panel when awaiting confirmation — even if confirmData is
+  // still loading or null (the panel handles that gracefully)
+  const showConfirmPanel = awaitingConfirm
   const showPaperSelector = papers.length > 0 && (status === 'COMPLETED' || status === 'DONE' || status === 'AWAIT_SELECTION')
 
   /* ---------- render ---------- */
@@ -333,6 +375,34 @@ export default function SessionView() {
                 <span className="text-gray-400">({(f.size / 1024).toFixed(1)} KB)</span>
               </a>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---- import to question bank ---- */}
+      {(status === 'COMPLETED' || status === 'DONE' || status === 'AWAIT_SELECTION') && (
+        <div className="bg-white rounded-xl border border-gray-200 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900">导入到题库</h3>
+              <p className="text-xs text-gray-400 mt-0.5">
+                将 AI 管道分析出的题目导入到题库，用于手动/自动/智能组卷
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {bankImportMsg && (
+                <span className={`text-xs ${bankImportMsg.startsWith('成功') ? 'text-green-600' : 'text-red-500'}`}>
+                  {bankImportMsg}
+                </span>
+              )}
+              <button
+                onClick={handleImportToBank}
+                disabled={importingBank}
+                className="px-4 py-1.5 text-sm font-medium rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
+              >
+                {importingBank ? '导入中...' : '导入到题库'}
+              </button>
+            </div>
           </div>
         </div>
       )}

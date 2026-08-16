@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../store/authStore'
 import type { SessionConfig } from '../types'
 import ConfigForm, { type ConfigFormValues } from '../components/dashboard/ConfigForm'
 import FileUploader, { type UploadedFile } from '../components/dashboard/FileUploader'
@@ -66,8 +67,12 @@ export default function Dashboard() {
         formData.append('files', item.file)
       }
 
+      const token = useAuthStore.getState().token
+      const authHeaders = token ? { Authorization: `Bearer ${token}` } : undefined
+
       const createRes = await fetch('/api/sessions', {
         method: 'POST',
+        headers: authHeaders,
         body: formData,
       })
 
@@ -81,6 +86,7 @@ export default function Dashboard() {
       // 2. POST /api/sessions/:id/start
       const startRes = await fetch(`/api/sessions/${id}/start`, {
         method: 'POST',
+        headers: authHeaders,
       })
 
       if (!startRes.ok) {

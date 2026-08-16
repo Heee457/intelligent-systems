@@ -20,6 +20,7 @@ function sessionPath(id: string) {
 export async function createSession(
   config: SessionConfig,
   filenames: string[],
+  teacherId: string,
 ): Promise<Session> {
   const id = generateId()
   const now = Date.now()
@@ -28,6 +29,7 @@ export async function createSession(
 
   const session: Session = {
     id,
+    teacherId,
     workDir: dir,
     buildDir: path.join(dir, 'exam-build'),
     config,
@@ -58,14 +60,17 @@ export async function getSession(id: string): Promise<Session | undefined> {
   }
 }
 
-export async function listSessions(): Promise<Session[]> {
+export async function listSessions(teacherId?: string): Promise<Session[]> {
   await ensureDir(DATA_ROOT)
   const entries = await fs.readdir(DATA_ROOT, { withFileTypes: true })
   const sessions: Session[] = []
   for (const entry of entries) {
     if (!entry.isDirectory() || !entry.name.startsWith('session-')) continue
     const s = await getSession(entry.name.replace('session-', ''))
-    if (s) sessions.push(s)
+    if (!s) continue
+    // Backward compat: sessions without teacherId are visible to all
+    if (teacherId && s.teacherId && s.teacherId !== teacherId) continue
+    sessions.push(s)
   }
   sessions.sort((a, b) => b.createdAt - a.createdAt)
   return sessions

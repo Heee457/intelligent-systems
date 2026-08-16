@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 
@@ -16,10 +16,17 @@ export default function StudentDashboard() {
   const [joinCode, setJoinCode] = useState('')
   const [joinMsg, setJoinMsg] = useState('')
 
-  useEffect(() => {
-    fetch(`${API}/api/student/dashboard`, { headers: headers() })
-      .then(r => r.json()).then(d => { setPublishes(d.publishes || []); setLoading(false) })
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true)
+    const res = await fetch(`${API}/api/student/dashboard`, { headers: headers() })
+    const data = await res.json()
+    setPublishes(data.publishes || [])
+    setLoading(false)
   }, [])
+
+  useEffect(() => {
+    fetchDashboard()
+  }, [fetchDashboard])
 
   const handleJoin = async () => {
     const res = await fetch(`${API}/api/student/classes/join`, {
@@ -29,6 +36,7 @@ export default function StudentDashboard() {
     const d = await res.json()
     setJoinMsg(d.class ? `已加入：${d.class.name}` : d.error || '失败')
     setJoinCode('')
+    if (d.class) await fetchDashboard()
   }
 
   const handleStart = async (publishId: string) => {

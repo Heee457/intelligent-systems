@@ -2,12 +2,19 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useExamStore } from '../store/examStore'
 import { useQuestionStore } from '../store/questionStore'
 import { useAuthStore } from '../store/authStore'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Modal from '../components/shared/Modal'
 import QuestionForm from '../components/questions/QuestionForm'
 import type { ExamQuestion } from '../types'
 
 const API = 'http://localhost:3001'
+
+type TeacherClass = {
+  id: string
+  name: string
+  join_code?: string
+  studentCount?: number
+}
 
 export default function ExamViewer() {
   const { id } = useParams<{ id: string }>()
@@ -25,7 +32,37 @@ export default function ExamViewer() {
   const [showPublish, setShowPublish] = useState(false)
   const [publishTitle, setPublishTitle] = useState(exam?.title ?? '')
   const [publishDuration, setPublishDuration] = useState('')
+  const [publishClassId, setPublishClassId] = useState('')
+  const [classes, setClasses] = useState<TeacherClass[]>([])
+  const [classesLoading, setClassesLoading] = useState(false)
+  const [classesError, setClassesError] = useState<string | null>(null)
   const [shuffleQuestions, setShuffleQuestions] = useState(false)
+
+  useEffect(() => {
+    if (!showPublish) return
+    let cancelled = false
+
+    async function fetchClasses() {
+      const token = useAuthStore.getState().token
+      setClassesLoading(true)
+      setClassesError(null)
+      try {
+        const res = await fetch(`${API}/api/classes`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!res.ok) throw new Error(`班级加载失败 (${res.status})`)
+        const data = await res.json()
+        if (!cancelled) setClasses(Array.isArray(data) ? data : [])
+      } catch (err) {
+        if (!cancelled) setClassesError(err instanceof Error ? err.message : '班级加载失败')
+      } finally {
+        if (!cancelled) setClassesLoading(false)
+      }
+    }
+
+    fetchClasses()
+    return () => { cancelled = true }
+  }, [showPublish])
 
   if (!exam) {
     return (
@@ -75,6 +112,14 @@ export default function ExamViewer() {
     window.print()
   }
 
+  const openPublishModal = () => {
+    setPublishTitle(exam.title)
+    setPublishDuration('')
+    setPublishClassId('')
+    setShuffleQuestions(false)
+    setShowPublish(true)
+  }
+
   const handlePublish = async () => {
     if (!publishTitle.trim() || !publishDuration) {
       alert('请填写发布标题和考试时长')
@@ -88,6 +133,7 @@ export default function ExamViewer() {
         examId: exam.id,
         title: publishTitle.trim(),
         duration: Number(publishDuration),
+        classId: publishClassId || undefined,
         shuffle: shuffleQuestions,
       }),
     })
@@ -98,6 +144,7 @@ export default function ExamViewer() {
     }
     await updateExam(exam.id, { status: 'published' })
     setShowPublish(false)
+    setPublishClassId('')
   }
 
   const sortedQuestions = [...exam.questions].sort((a, b) => a.order - b.order)
@@ -127,7 +174,7 @@ export default function ExamViewer() {
         )}
         <div className="flex gap-2">
           {exam.status === 'draft' ? (
-            <button onClick={() => setShowPublish(true)} className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600">
+            <button onClick={openPublishModal} className="px-3 py-1.5 text-sm bg-green-500 text-white rounded-lg hover:bg-green-600">
               发布
             </button>
           ) : (
@@ -234,6 +281,19 @@ export default function ExamViewer() {
               min={1}
               className="w-full px-3 py-2 border rounded-lg text-sm"
             />
+            <select
+              aria-label="发布范围"
+              value={publishClassId}
+              onChange={(e) => setPublishClassId(e.target.value)}
+              disabled={classesLoading}
+              className="w-full px-3 py-2 border rounded-lg text-sm bg-white disabled:opacity-50"
+            >
+              <option value="">全部学生</option>
+              {classes.map((cls) => (
+                <option key={cls.id} value={cls.id}>{cls.name}</option>
+              ))}
+            </select>
+            {classesError && <p className="text-xs text-red-500">{classesError}</p>}
             <div className="flex gap-2">
               <label className="flex items-center gap-1 text-sm">
                 <input type="checkbox" checked={shuffleQuestions} onChange={(e) => setShuffleQuestions(e.target.checked)} /> 打乱题目顺序

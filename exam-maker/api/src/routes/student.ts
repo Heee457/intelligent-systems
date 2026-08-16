@@ -26,7 +26,7 @@ export async function studentRoutes(app: FastifyInstance) {
     // Add submission status for each publish
     const result = rows.map((ep: any) => {
       const sub = db.prepare(
-        'SELECT id, status, total_score, submitted_at FROM submissions WHERE publish_id = ? AND student_id = ? ORDER BY created_at DESC LIMIT 1'
+        'SELECT id, status, total_score, submitted_at FROM submissions WHERE publish_id = ? AND student_id = ? ORDER BY started_at DESC LIMIT 1'
       ).get(ep.id, req.user!.userId) as any
 
       return {

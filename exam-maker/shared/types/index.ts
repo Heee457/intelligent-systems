@@ -150,6 +150,7 @@ export interface PaperData {
 
 export interface Session {
   id: string
+  teacherId: string
   workDir: string
   buildDir: string
   config: SessionConfig
