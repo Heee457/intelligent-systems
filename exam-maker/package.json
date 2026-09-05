@@ -1,0 +1,27 @@
+{
+  "name": "exam-maker-monorepo",
+  "private": true,
+  "workspaces": [
+    "web",
+    "api",
+    "shared"
+  ],
+  "allowScripts": {
+    "bcrypt@6.0.0": true,
+    "jsonwebtoken@9.0.3": true,
+    "better-sqlite3@11.10.0": true
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  },
+  "scripts": {
+    "build": "npm --workspace web run build && npm --workspace api run build",
+    "test:api": "npm --workspace api test",
+    "ci": "npm run build && npm run test:api && npm run e2e",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "e2e:ui": "playwright test --ui",
+    "e2e:codegen": "playwright codegen http://localhost:5173",
+    "e2e:report": "playwright show-report"
+  }
+}
