@@ -5,6 +5,7 @@ interface ConfirmPanelProps {
   sessionId: string
   point: 'blueprint' | 'template' | 'selection'
   data: unknown
+  modifications?: unknown
   onConfirmed: () => void
 }
 
@@ -16,14 +17,14 @@ interface ConfirmContent {
 }
 
 /* ---------- component ---------- */
-export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: ConfirmPanelProps) {
+export default function ConfirmPanel({ sessionId, point, data, modifications, onConfirmed }: ConfirmPanelProps) {
   const [action, setAction] = useState<Action | null>(null)
   const [feedback, setFeedback] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const confirmData = data as ConfirmContent
-  const content = confirmData?.content || ''
+  const confirmData = (data ?? {}) as ConfirmContent
+  const content = (confirmData?.content as string) || ''
 
   /* which label to show */
   const titleLabels: Record<string, string> = {
@@ -43,7 +44,8 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
         body: JSON.stringify({
           action: chosen,
           point,
-          feedback: chosen === 'reject' ? feedback : undefined,
+          feedback: (chosen === 'reject' || chosen === 'modify') ? feedback : undefined,
+          modifications: chosen === 'approve' ? modifications : undefined,
         }),
       })
       if (!res.ok) {
@@ -168,6 +170,16 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
           <div className="prose prose-sm max-w-none">{renderMarkdown(content)}</div>
         ) : point === 'selection' ? (
           <p className="text-sm text-gray-500">请在下方选择需要保留的试卷，然后确认。</p>
+        ) : point === 'blueprint' ? (
+          <div className="text-sm text-gray-500 space-y-1">
+            <p>双向细目表已生成，请在下方确认或驳回。</p>
+            <p className="text-xs text-gray-400">如内容未正常显示，可驳回后重新生成。</p>
+          </div>
+        ) : point === 'template' ? (
+          <div className="text-sm text-gray-500 space-y-1">
+            <p>试卷模板已生成，请在下方确认或驳回。</p>
+            <p className="text-xs text-gray-400">如内容未正常显示，可驳回后重新生成。</p>
+          </div>
         ) : (
           <p className="text-sm text-gray-400">等待数据加载...</p>
         )}
@@ -179,16 +191,22 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
           </div>
         )}
 
-        {/* ---- reject feedback ---- */}
-        {action === 'reject' && (
+        {/* ---- reject / modify feedback ---- */}
+        {(action === 'reject' || action === 'modify') && (
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">驳回意见</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              {action === 'reject' ? '驳回意见' : '修改意见'}
+            </label>
             <textarea
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
               rows={3}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
-              placeholder="请说明驳回原因或修改建议..."
+              placeholder={
+                action === 'reject'
+                  ? '请说明驳回原因或修改建议...'
+                  : '请描述需要修改的内容，如：增加第3题的难度、调整考点A的分值占比...'
+              }
             />
           </div>
         )}
@@ -227,7 +245,7 @@ export default function ConfirmPanel({ sessionId, point, data, onConfirmed }: Co
               </button>
               <button
                 onClick={() => handleSubmit(action)}
-                disabled={submitting || (action === 'reject' && !feedback.trim())}
+                disabled={submitting || ((action === 'reject' || action === 'modify') && !feedback.trim())}
                 className={`px-5 py-2 text-sm font-medium rounded-lg text-white transition-colors disabled:opacity-50 ${
                   action === 'approve'
                     ? 'bg-green-500 hover:bg-green-600'

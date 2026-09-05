@@ -1,4 +1,5 @@
 import type { Question, QuestionType, Difficulty } from '../../types'
+import { latexToPlainText } from '../shared/LatexRenderer'
 
 interface QuestionListProps {
   questions: Question[]
@@ -64,16 +65,22 @@ export default function QuestionList({
               className="w-4 h-4 mt-0.5 accent-indigo-500"
             />
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5 mb-0.5">
+              <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
                 <span className={`text-xs px-1.5 py-0.5 rounded ${TYPE_BADGES[q.type]}`}>
                   {TYPE_LABELS[q.type]}
                 </span>
                 <span className={`text-xs ${DIFF_COLORS[q.difficulty]}`}>
                   {DIFF_LABELS[q.difficulty]}
                 </span>
+                {q.qualityIssues?.length ? <span className="text-xs text-amber-600">需完善</span> : null}
+                {q.isErrorProne && <span className="text-xs text-red-600">易错</span>}
+                {q.isKeyQuestion && <span className="text-xs text-rose-600">重点</span>}
+                {q.difficultySuggestion && q.difficultySuggestion !== q.difficulty && (
+                  <span className="text-xs text-sky-600">建议{DIFF_LABELS[q.difficultySuggestion]}</span>
+                )}
               </div>
               <p className="text-sm font-medium text-gray-800 truncate">{q.title}</p>
-              <p className="text-xs text-gray-500 truncate mt-0.5">{q.content}</p>
+              <p className="text-xs text-gray-500 truncate mt-0.5">{latexToPlainText(q.content)}</p>
               {q.knowledgePoints.length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {q.knowledgePoints.slice(0, 3).map((kp) => (

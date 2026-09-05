@@ -12,6 +12,7 @@ function headers() {
 interface ExamState {
   exams: Exam[]
   loading: boolean
+  generationWarnings: string[]
 
   fetchExams: () => Promise<void>
   createExam: (title: string) => Promise<Exam | null>
@@ -20,11 +21,14 @@ interface ExamState {
   addQuestionToExam: (examId: string, questionId: string, score: number) => Promise<void>
   removeQuestionFromExam: (examId: string, questionId: string) => Promise<void>
   generateExamFromRule: (rule: GenerationRule) => Promise<Exam | null>
+  createExamVersion: (id: string, title?: string) => Promise<Exam | null>
+  generateRemedialExam: (payload: { publishId: string; mode: 'practice' | 'retake'; knowledgePoints: string[]; maxQuestions?: number }) => Promise<Exam | null>
 }
 
 export const useExamStore = create<ExamState>()((set, get) => ({
   exams: [],
   loading: false,
+  generationWarnings: [],
 
   fetchExams: async () => {
     set({ loading: true })
@@ -50,11 +54,17 @@ export const useExamStore = create<ExamState>()((set, get) => ({
   },
 
   updateExam: async (id, data) => {
-    await fetch(`${API}/api/exams/${id}`, {
+    const res = await fetch(API + '/api/exams/' + id, {
       method: 'PUT', headers: headers(),
       body: JSON.stringify(data),
     })
-    set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, ...data, updatedAt: Date.now() } : e) }))
+    if (!res.ok) {
+      const error = await res.json().catch(() => null)
+      throw new Error(error?.error || '试卷更新失败')
+    }
+    const payload = await res.json().catch(() => null)
+    const updated = payload?.exam ? payload.exam : { ...data, updatedAt: Date.now() }
+    set((s) => ({ exams: s.exams.map((e) => e.id === id ? { ...e, ...updated } : e) }))
   },
 
   addQuestionToExam: async (examId, questionId, score) => {
@@ -80,7 +90,27 @@ export const useExamStore = create<ExamState>()((set, get) => ({
     })
     if (!res.ok) return null
     const data = await res.json()
+    set((s) => ({ exams: [data.exam, ...s.exams], generationWarnings: data.warnings || [] }))
+    return data.exam
+  },
+  createExamVersion: async (id, title) => {
+    const res = await fetch(API + '/api/exams/' + id + '/versions', {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify(title ? { title } : {}),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
     set((s) => ({ exams: [data.exam, ...s.exams] }))
+    return data.exam
+  },
+  generateRemedialExam: async (payload) => {
+    const res = await fetch(`${API}/api/exams/remedial`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) return null
+    const data = await res.json()
+    set((s) => ({ exams: [data.exam, ...s.exams], generationWarnings: data.warnings || [] }))
     return data.exam
   },
 }))

@@ -49,7 +49,8 @@ export default function StudentDashboard() {
   }
 
   const ongoing = publishes.filter((p: any) => p.submission?.status === 'started')
-  const upcoming = publishes.filter((p: any) => !p.submission)
+  const available = publishes.filter((p: any) => !p.submission && p.windowStatus === 'open')
+  const scheduled = publishes.filter((p: any) => !p.submission && p.windowStatus === 'scheduled')
   const completed = publishes.filter((p: any) => p.submission?.status === 'submitted' || p.submission?.status === 'graded')
 
   if (loading) return <div className="text-center py-24 text-gray-400">加载中...</div>
@@ -69,13 +70,18 @@ export default function StudentDashboard() {
         <Section title="进行中" publishes={ongoing} onStart={handleStart} highlight />
       )}
 
-      <Section title="即将开始" publishes={upcoming} onStart={handleStart} />
+      <Section title="可参加考试" publishes={available} onStart={handleStart} />
+      <Section title="即将开始" publishes={scheduled} onStart={handleStart} scheduled />
       <Section title="已结束" publishes={completed} onStart={handleStart} done />
     </div>
   )
 }
 
-function Section({ title, publishes, onStart, highlight, done }: any) {
+function formatTime(value?: number) {
+  return value ? new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '不限'
+}
+
+function Section({ title, publishes, onStart, highlight, done, scheduled }: any) {
   if (publishes.length === 0) return null
   return (
     <div>
@@ -85,12 +91,13 @@ function Section({ title, publishes, onStart, highlight, done }: any) {
           <div key={p.id} className={`bg-white rounded-xl border p-5 ${highlight ? 'border-indigo-300 ring-1 ring-indigo-200' : 'border-gray-200'}`}>
             <h3 className="font-semibold text-gray-900">{p.title}</h3>
             <p className="text-sm text-gray-400 mt-1">时长：{p.duration} 分钟</p>
+            <p className="text-xs text-gray-400 mt-1">开放：{formatTime(p.startTime)} - {formatTime(p.endTime)}</p>
             {p.submission && (
-              <p className="text-sm text-gray-400">得分：{p.submission.total_score ?? '—'} / {p.exam_total_score}</p>
+              <p className="text-sm text-gray-400">得分：{p.submission.scoreVisible ? (p.submission.total_score ?? '—') : '待公布'} / {p.exam_total_score}</p>
             )}
             {!done && (
-              <button onClick={() => onStart(p.id)} className="mt-3 px-4 py-1.5 text-sm bg-indigo-500 text-white rounded-lg hover:bg-indigo-600">
-                {p.submission ? '继续答题' : '开始考试'}
+              <button onClick={() => onStart(p.id)} disabled={!p.canStart} className="mt-3 px-4 py-1.5 text-sm bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                {scheduled ? '未开始' : p.submission ? '继续答题' : '开始考试'}
               </button>
             )}
             {done && p.submission && (

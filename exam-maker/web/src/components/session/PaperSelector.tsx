@@ -5,6 +5,7 @@ import type { PaperData } from '../../types'
 interface PaperSelectorProps {
   sessionId: string
   papers: PaperData[]
+  onSelectionChange?: (selectedIndexes: number[]) => void
 }
 
 const FORMAT_LABELS: Record<string, string> = {
@@ -21,21 +22,37 @@ const FORMAT_COLORS: Record<string, string> = {
   md: 'text-gray-600 bg-gray-50 border-gray-200',
 }
 
+function paperFormats(paper: PaperData): string[] {
+  return Array.isArray(paper.formats) && paper.formats.length > 0 ? paper.formats : ['tex']
+}
+
+function defaultSelectedPapers(papers: PaperData[]) {
+  const selected = papers.filter((paper) => paper.selected).map((paper) => paper.index)
+  if (selected.length > 0) return new Set(selected)
+  return new Set(papers[0] ? [papers[0].index] : [])
+}
+
+function paperDifficulty(paper: PaperData) {
+  return paper.difficulty || { basic: 0, medium: 0, hard: 0 }
+}
+
 /* ---------- component ---------- */
-export default function PaperSelector({ sessionId, papers }: PaperSelectorProps) {
+export default function PaperSelector({ sessionId, papers, onSelectionChange }: PaperSelectorProps) {
   const [selected, setSelected] = useState<Set<number>>(
-    () => new Set(papers.filter((p) => p.selected).map((p) => p.index)),
+    () => defaultSelectedPapers(papers),
   )
   const [downloading, setDownloading] = useState(false)
 
   const toggle = useCallback((index: number) => {
     setSelected((prev) => {
       const next = new Set(prev)
-      if (next.has(index)) next.delete(index)
-      else next.add(index)
+      if (next.has(index)) {
+        if (next.size > 1) next.delete(index)
+      } else next.add(index)
+      onSelectionChange?.(Array.from(next))
       return next
     })
-  }, [])
+  }, [onSelectionChange])
 
   const selectedPapers = papers.filter((p) => selected.has(p.index))
 
@@ -56,7 +73,7 @@ export default function PaperSelector({ sessionId, papers }: PaperSelectorProps)
     setDownloading(true)
     let delay = 0
     for (const paper of selectedPapers) {
-      for (const fmt of paper.formats) {
+      for (const fmt of paperFormats(paper)) {
         setTimeout(() => downloadFile(`${paper.filename}.${fmt}`), delay)
         delay += 300
       }
@@ -68,7 +85,7 @@ export default function PaperSelector({ sessionId, papers }: PaperSelectorProps)
     setDownloading(true)
     let delay = 0
     for (const paper of papers) {
-      for (const fmt of paper.formats) {
+      for (const fmt of paperFormats(paper)) {
         setTimeout(() => downloadFile(`${paper.filename}.${fmt}`), delay)
         delay += 300
       }
@@ -79,6 +96,7 @@ export default function PaperSelector({ sessionId, papers }: PaperSelectorProps)
   /* ---------- coverage display ---------- */
   const coverageColor = (val: string) => {
     const n = parseFloat(val)
+    if (!Number.isFinite(n)) return 'text-gray-500'
     if (n >= 90) return 'text-green-600'
     if (n >= 70) return 'text-yellow-600'
     return 'text-red-600'
@@ -123,6 +141,10 @@ export default function PaperSelector({ sessionId, papers }: PaperSelectorProps)
       <div className="divide-y divide-gray-100">
         {papers.map((paper) => {
           const isSelected = selected.has(paper.index)
+          const difficulty = paperDifficulty(paper)
+          const coverage = paper.coverage || '未知'
+          const verifyPassed = paper.verifyPassed || '未验证'
+          const displayIndex = paper.index > 0 ? paper.index : paper.index + 1
           return (
             <div
               key={paper.index}
@@ -142,39 +164,39 @@ export default function PaperSelector({ sessionId, papers }: PaperSelectorProps)
               <div className="flex-1 min-w-0 grid grid-cols-5 gap-4 text-sm">
                 {/* name */}
                 <div className="font-medium text-gray-900 truncate">
-                  第 {paper.index + 1} 套
+                  第 {displayIndex} 套
                 </div>
 
                 {/* coverage */}
-                <div className={coverageColor(paper.coverage)}>
-                  覆盖 {paper.coverage}
+                <div className={coverageColor(coverage)}>
+                  覆盖 {coverage}
                 </div>
 
                 {/* difficulty breakdown */}
                 <div className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">
-                  <span className="text-green-600">{paper.difficulty.basic}%</span>
+                  <span className="text-green-600">{difficulty.basic}%</span>
                   <span className="text-gray-300">/</span>
-                  <span className="text-blue-600">{paper.difficulty.medium}%</span>
+                  <span className="text-blue-600">{difficulty.medium}%</span>
                   <span className="text-gray-300">/</span>
-                  <span className="text-red-600">{paper.difficulty.hard}%</span>
+                  <span className="text-red-600">{difficulty.hard}%</span>
                 </div>
 
                 {/* verify */}
                 <div>
-                  {paper.verifyPassed === 'true' || paper.verifyPassed === 'passed' ? (
+                  {verifyPassed === 'true' || verifyPassed === 'passed' ? (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-green-100 text-green-700 font-medium">
                       验算通过
                     </span>
                   ) : (
                     <span className="text-xs px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-medium">
-                      {paper.verifyPassed}
+                      {verifyPassed}
                     </span>
                   )}
                 </div>
 
                 {/* download links */}
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  {paper.formats.map((fmt) => (
+                  {paperFormats(paper).map((fmt) => (
                     <button
                       key={fmt}
                       onClick={() => downloadFile(`${paper.filename}.${fmt}`)}

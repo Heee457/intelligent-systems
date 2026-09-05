@@ -15,6 +15,7 @@ export interface PipelineContext {
   buildDir: string
   sendWs: (msg: WsMessage) => void
   claudeClient: ClaudeClient
+  feedback?: string  // User feedback from reject/modify — step functions should include in prompt
 }
 
 export interface StepResult {

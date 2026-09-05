@@ -21,12 +21,17 @@ async function analyzeAndVerify(
   point: string,
   system: string,
 ): Promise<StepResult> {
+  // Include user feedback in the prompt if provided (from reject/modify action)
+  const feedbackInstruction = ctx.feedback
+    ? `\n\n【用户的修改/驳回意见】\n${ctx.feedback}\n\n请根据以上意见调整你的分析和产物。`
+    : ''
+
   // Round 1: Analysis
   await ctx.claudeClient.sendMessage({
     system,
     messages: [{
       role: 'user',
-      content: '分析真题产物，产出分析结果。完成后调用 request_confirmation。',
+      content: `分析真题产物，产出分析结果。完成后调用 request_confirmation。${feedbackInstruction}`,
     }],
     tools: COMMON_TOOLS,
     maxTokens: 16384,
@@ -63,6 +68,12 @@ async function analyzeAndVerify(
   try {
     mdContent = await fs.readFile(path.join(ctx.buildDir, `${point}.md`), 'utf-8')
   } catch { /* file may not exist */ }
+
+  // Ensure we always have meaningful content for the confirm panel
+  if (!mdContent.trim()) {
+    mdContent = `## 双向细目表\n\n分析产物已生成，详情请查看生成文件：\n\n- \`${point}.md\` — 可读细目表\n- \`${point}.jsonl\` — 结构化数据`
+    ctx.sendWs({ type: 'log', message: '⚠️ 细目表 .md 文件为空，使用默认摘要' })
+  }
 
   return {
     success: true,

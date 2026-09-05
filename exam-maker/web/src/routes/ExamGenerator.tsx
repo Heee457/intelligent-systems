@@ -1,14 +1,12 @@
 import { useState } from 'react'
 import ManualSelector from '../components/exams/ManualSelector'
-import AutoGenerator from '../components/exams/AutoGenerator'
 import SmartGenerator from '../components/exams/SmartGenerator'
 
-type Tab = 'manual' | 'auto' | 'smart'
+type Tab = 'manual' | 'smart'
 
 const TABS: { key: Tab; label: string; desc: string }[] = [
   { key: 'manual', label: '手动组卷', desc: '从题库中手动挑选题目，自由排序' },
-  { key: 'auto', label: '自动组卷', desc: '设置题型数量和分值，系统随机抽取' },
-  { key: 'smart', label: '智能组卷', desc: '按难度和知识点精确筛选后抽取' },
+  { key: 'smart', label: '智能组卷', desc: '按范围、知识点、难度和题型自动组合试卷' },
 ]
 
 export default function ExamGenerator() {
@@ -32,7 +30,6 @@ export default function ExamGenerator() {
       <p className="text-sm text-gray-500 -mt-4 mb-6">{TABS.find((t) => t.key === tab)!.desc}</p>
 
       {tab === 'manual' && <ManualSelector />}
-      {tab === 'auto' && <AutoGenerator />}
       {tab === 'smart' && <SmartGenerator />}
     </div>
   )

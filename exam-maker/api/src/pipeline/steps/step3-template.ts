@@ -13,12 +13,17 @@ const SYSTEM = `你是试卷模板提取专家。根据真题 LaTeX 和双向细
 完成后调用 request_confirmation 等待教师审核。`
 
 export async function runStep3(ctx: PipelineContext): Promise<StepResult> {
+  // Include user feedback in the prompt if provided (from reject/modify action)
+  const feedbackInstruction = ctx.feedback
+    ? `\n\n【用户的修改/驳回意见】\n${ctx.feedback}\n\n请根据以上意见调整你的分析和产物。`
+    : ''
+
   // Round 1: Analysis
   await ctx.claudeClient.sendMessage({
     system: SYSTEM,
     messages: [{
       role: 'user',
-      content: '分析真题产物与双向细目表，提取试卷模板。完成后调用 request_confirmation。',
+      content: `分析真题产物与双向细目表，提取试卷模板。完成后调用 request_confirmation。${feedbackInstruction}`,
     }],
     tools: COMMON_TOOLS,
     maxTokens: 16384,
@@ -55,6 +60,12 @@ export async function runStep3(ctx: PipelineContext): Promise<StepResult> {
   try {
     mdContent = await fs.readFile(path.join(ctx.buildDir, 'template.md'), 'utf-8')
   } catch { /* file may not exist */ }
+
+  // Ensure we always have meaningful content for the confirm panel
+  if (!mdContent.trim()) {
+    mdContent = `## 模板结构\n\n模板产物已生成，详情请查看生成文件：\n\n- \`template.json\` — 结构化模板\n- \`template.md\` — 可读模板说明`
+    ctx.sendWs({ type: 'log', message: '⚠️ 模板 .md 文件为空，使用默认摘要' })
+  }
 
   return {
     success: true,

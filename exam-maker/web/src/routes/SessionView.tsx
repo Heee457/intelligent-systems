@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { Session, SessionFile, SessionStatus, WsMessage, PaperData } from '../types'
 import { useAuthStore } from '../store/authStore'
-import { useQuestionStore } from '../store/questionStore'
 import ProgressBar from '../components/session/ProgressBar'
 import StepLog, { type LogEntry } from '../components/session/StepLog'
 import ConfirmPanel from '../components/session/ConfirmPanel'
@@ -48,6 +47,65 @@ async function fetchConfirmFile(sessionId: string, point: string, token?: string
   } catch {
     return null
   }
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+function SessionConfigSummary({ session }: { session: Session }) {
+  const coverage = session.config.coverageItems || []
+  const extra = session.config.additionalRequirements
+  if (coverage.length > 0 || extra) {
+    return (
+      <div className="mt-2 space-y-1">
+        {coverage.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {coverage.map((item) => (
+              <span key={item} className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600">{item}</span>
+            ))}
+          </div>
+        )}
+        {extra && <p className="text-sm text-gray-500">{extra}</p>}
+      </div>
+    )
+  }
+  return session.config.scope ? <p className="text-sm text-gray-400 mt-0.5">{session.config.scope}</p> : null
+}
+
+function normalizePapers(value: unknown): PaperData[] {
+  if (!Array.isArray(value)) return []
+
+  const normalized = value.map((paper, idx) => {
+    const raw = paper && typeof paper === 'object' ? paper as Record<string, unknown> : {}
+    const rawDifficulty = raw.difficulty && typeof raw.difficulty === 'object'
+      ? raw.difficulty as Record<string, unknown>
+      : {}
+    const paperIndex = toNumber(raw.index, idx + 1)
+    const formats = Array.isArray(raw.formats)
+      ? raw.formats.filter((fmt): fmt is string => typeof fmt === 'string' && fmt.length > 0)
+      : []
+
+    return {
+      index: paperIndex,
+      filename: typeof raw.filename === 'string' && raw.filename ? raw.filename : `paper-${paperIndex}`,
+      formats: formats.length > 0 ? formats : ['tex'],
+      verifyPassed: typeof raw.verifyPassed === 'string' && raw.verifyPassed ? raw.verifyPassed : '未验证',
+      difficulty: {
+        basic: toNumber(rawDifficulty.basic),
+        medium: toNumber(rawDifficulty.medium),
+        hard: toNumber(rawDifficulty.hard),
+      },
+      coverage: typeof raw.coverage === 'string' && raw.coverage ? raw.coverage : '未知',
+      selected: typeof raw.selected === 'boolean' ? raw.selected : false,
+    }
+  })
+
+  if (normalized.length > 0 && !normalized.some((paper) => paper.selected)) {
+    normalized[0] = { ...normalized[0], selected: true }
+  }
+  return normalized
 }
 
 /* ---------- component ---------- */
@@ -98,7 +156,7 @@ export default function SessionView() {
       setCurrentStep(data.currentStep)
       setStepDetail(data.stepDetail)
       setFiles(data.files || [])
-      setPapers(data.papers || [])
+      setPapers(normalizePapers(data.papers))
 
       /* if status is awaiting confirmation, fetch confirm data from file */
       const t = useAuthStore.getState().token
@@ -113,8 +171,9 @@ export default function SessionView() {
         fetchConfirmFile(id, 'selection', t ?? undefined).then((fileData) => {
           setConfirmData(fileData)
           // Also populate papers from confirm file (session store may not have them)
-          if (Array.isArray(fileData) && fileData.length > 0) {
-            setPapers(fileData as PaperData[])
+          const nextPapers = normalizePapers(fileData)
+          if (nextPapers.length > 0) {
+            setPapers(nextPapers)
           }
         })
       }
@@ -177,7 +236,7 @@ export default function SessionView() {
 
             /* also store paper data when received via selection confirm */
             if (msg.point === 'selection') {
-              setPapers(msg.data as PaperData[])
+              setPapers(normalizePapers(msg.data))
             }
             break
           }
@@ -191,7 +250,7 @@ export default function SessionView() {
             setSession(msg.session)
             setStatus(msg.session.status)
             setCurrentStep(msg.session.currentStep)
-            setPapers(msg.session.papers || [])
+            setPapers(normalizePapers(msg.session.papers))
             setConfirmPoint(null)
             setConfirmData(null)
             break
@@ -220,6 +279,19 @@ export default function SessionView() {
     fetchSession()
   }, [fetchSession])
 
+  const handlePaperSelectionChange = useCallback((selectedIndexes: number[]) => {
+    const selected = new Set(selectedIndexes)
+    setPapers((prev) => prev.map((paper) => ({ ...paper, selected: selected.has(paper.index) })))
+    setConfirmData((prev: unknown) => {
+      if (!Array.isArray(prev)) return prev
+      return prev.map((paper) => {
+        const raw = paper && typeof paper === 'object' ? paper as Record<string, unknown> : {}
+        const paperIndex = toNumber(raw.index)
+        return { ...raw, selected: selected.has(paperIndex) }
+      })
+    })
+  }, [])
+
   /* ---------- confirm callback ---------- */
   const handleConfirmed = useCallback(() => {
     setConfirmPoint(null)
@@ -228,31 +300,23 @@ export default function SessionView() {
     fetchSession()
   }, [fetchSession])
 
-  /* ---------- import to question bank ---------- */
-  const { importQuestions } = useQuestionStore()
-  const [importingBank, setImportingBank] = useState(false)
-  const [bankImportMsg, setBankImportMsg] = useState<string | null>(null)
+  /* ---------- automatic question bank sync ---------- */
+  const bankSyncRef = useRef<string | null>(null)
 
-  const handleImportToBank = useCallback(async () => {
-    if (!id) return
-    setImportingBank(true)
-    setBankImportMsg(null)
-    try {
-      const res = await fetch(`/api/sessions/${id}/bank-questions`)
-      if (!res.ok) throw new Error(`请求失败 (${res.status})`)
-      const data = await res.json()
-      if (!data.questions || data.questions.length === 0) {
-        setBankImportMsg('该会话没有可导入的题目')
-        return
-      }
-      const count = importQuestions(JSON.stringify(data.questions))
-      setBankImportMsg(`成功导入 ${count} 道题目到题库`)
-    } catch (err) {
-      setBankImportMsg(err instanceof Error ? err.message : '导入失败')
-    } finally {
-      setImportingBank(false)
-    }
-  }, [id, importQuestions])
+  useEffect(() => {
+    if (!id || !['AWAIT_SELECTION', 'COMPLETED', 'DONE'].includes(status)) return
+    const syncKey = id + ':' + status + ':' + papers.length
+    if (bankSyncRef.current === syncKey) return
+    bankSyncRef.current = syncKey
+
+    const token = useAuthStore.getState().token
+    fetch('/api/sessions/' + id + '/bank-questions/import', {
+      method: 'POST',
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+    }).catch((err) => {
+      console.error('[SessionView] Failed to auto-sync question bank', err)
+    })
+  }, [id, status, papers.length])
 
   /* ---------- derived state ---------- */
   const awaitingConfirm = confirmPoint !== null && status.startsWith('AWAIT_')
@@ -304,9 +368,7 @@ export default function SessionView() {
           <h1 className="text-2xl font-bold text-gray-900">
             {session.config.course || '未命名课程'}
           </h1>
-          {session.config.scope && (
-            <p className="text-sm text-gray-400 mt-0.5">{session.config.scope}</p>
-          )}
+          <SessionConfigSummary session={session} />
           <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
             <span>{session.config.nSets} 套</span>
             <span>{session.config.outputFormat.toUpperCase()}</span>
@@ -347,6 +409,7 @@ export default function SessionView() {
           sessionId={id!}
           point={confirmPoint!}
           data={confirmData}
+          modifications={confirmPoint === 'selection' ? { selectedPaperIndexes: papers.filter((paper) => paper.selected).map((paper) => paper.index) } : undefined}
           onConfirmed={handleConfirmed}
         />
       )}
@@ -379,37 +442,9 @@ export default function SessionView() {
         </div>
       )}
 
-      {/* ---- import to question bank ---- */}
-      {(status === 'COMPLETED' || status === 'DONE' || status === 'AWAIT_SELECTION') && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900">导入到题库</h3>
-              <p className="text-xs text-gray-400 mt-0.5">
-                将 AI 管道分析出的题目导入到题库，用于手动/自动/智能组卷
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {bankImportMsg && (
-                <span className={`text-xs ${bankImportMsg.startsWith('成功') ? 'text-green-600' : 'text-red-500'}`}>
-                  {bankImportMsg}
-                </span>
-              )}
-              <button
-                onClick={handleImportToBank}
-                disabled={importingBank}
-                className="px-4 py-1.5 text-sm font-medium rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50 transition-colors"
-              >
-                {importingBank ? '导入中...' : '导入到题库'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ---- paper selector ---- */}
       {showPaperSelector && (
-        <PaperSelector sessionId={id!} papers={papers} />
+        <PaperSelector sessionId={id!} papers={papers} onSelectionChange={handlePaperSelectionChange} />
       )}
     </div>
   )

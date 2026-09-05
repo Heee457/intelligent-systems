@@ -5,7 +5,7 @@ import { useAuthStore } from '../store/authStore'
 export default function Register() {
   const navigate = useNavigate()
   const { register, loading, error, clearError } = useAuthStore()
-  const [name, setName] = useState('')
+  const [username, setUsername] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<'teacher' | 'student'>('student')
@@ -13,7 +13,7 @@ export default function Register() {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     try {
-      await register(email, password, name, role)
+      await register(email, password, username, role)
       const userRole = useAuthStore.getState().user?.role
       navigate(userRole === 'teacher' ? '/' : '/student/dashboard')
     } catch { /* error is set in store */ }
@@ -32,13 +32,14 @@ export default function Register() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
           <input
             type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"
-            placeholder="请输入姓名"
+            placeholder="请输入用户名"
             required
           />
         </div>
@@ -47,6 +48,7 @@ export default function Register() {
           <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
           <input
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"
@@ -59,6 +61,7 @@ export default function Register() {
           <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
           <input
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"

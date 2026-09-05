@@ -15,7 +15,7 @@ interface AuthState {
   loading: boolean
   error: string | null
 
-  login: (email: string, password: string) => Promise<void>
+  login: (username: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string, role: 'teacher' | 'student') => Promise<void>
   logout: () => void
   fetchMe: () => Promise<void>
@@ -32,13 +32,13 @@ export const useAuthStore = create<AuthState>()(
       loading: false,
       error: null,
 
-      login: async (email, password) => {
+      login: async (username, password) => {
         set({ loading: true, error: null })
         try {
           const res = await fetch(`${API_BASE}/api/auth/login`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password }),
+            body: JSON.stringify({ username, password }),
           })
           const data = await res.json()
           if (!res.ok) throw new Error(data.error || '登录失败')

@@ -9,6 +9,9 @@ import SessionList from '../components/dashboard/SessionList'
 const DEFAULT_VALUES: ConfigFormValues = {
   course: '',
   scope: '',
+  contentBasis: 'upload',
+  coverageItems: [],
+  additionalRequirements: '',
   difficulty: '基础60% 中等30% 难10%',
   nSets: 8,
   outputFormat: 'latex',
@@ -18,6 +21,20 @@ const DEFAULT_VALUES: ConfigFormValues = {
 let fileIdCounter = 0
 function nextFileId(): string {
   return `file_${++fileIdCounter}_${Date.now()}`
+}
+
+const BASIS_LABELS: Record<NonNullable<SessionConfig['contentBasis']>, string> = {
+  upload: '上传资料优先',
+  bank: '题库知识点',
+  mixed: '资料 + 题库',
+}
+
+function buildSessionScope(values: ConfigFormValues): string | undefined {
+  const parts = [`命题依据：${BASIS_LABELS[values.contentBasis]}`]
+  if (values.coverageItems.length > 0) parts.push('覆盖内容：' + values.coverageItems.join('、'))
+  if (values.additionalRequirements.trim()) parts.push('补充要求：' + values.additionalRequirements.trim())
+  if (parts.length === 1 && values.scope.trim()) parts.push(values.scope.trim())
+  return parts.join('；')
 }
 
 export default function Dashboard() {
@@ -55,7 +72,10 @@ export default function Dashboard() {
       const formData = new FormData()
       const sessionConfig: SessionConfig = {
         course: config.course,
-        scope: config.scope || undefined,
+        scope: buildSessionScope(config),
+        contentBasis: config.contentBasis,
+        coverageItems: config.coverageItems,
+        additionalRequirements: config.additionalRequirements.trim() || undefined,
         difficulty: config.difficulty,
         nSets: config.nSets,
         outputFormat: config.outputFormat,

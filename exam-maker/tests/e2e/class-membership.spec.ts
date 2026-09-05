@@ -33,7 +33,7 @@ test.describe('class membership', () => {
     await expect(page.getByText(`已加入：${className}`)).toBeVisible()
 
     await page.getByRole('button', { name: '退出' }).click()
-    await loginUser(page, teacher.email, testPassword)
+    await loginUser(page, teacher.name, testPassword)
     await expectTeacherDashboard(page)
 
     await page.getByRole('link', { name: /班级/ }).click()

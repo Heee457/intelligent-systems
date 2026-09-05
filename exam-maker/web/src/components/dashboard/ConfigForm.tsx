@@ -1,12 +1,21 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import type { SessionConfig } from '../../types'
+import { useQuestionStore } from '../../store/questionStore'
+import TagInput from '../shared/TagInput'
 
 type DifficultyPreset = '60/30/10' | '50/30/20' | 'custom'
+type ContentBasis = NonNullable<SessionConfig['contentBasis']>
 
 const PRESETS: { value: DifficultyPreset; label: string; desc: string }[] = [
   { value: '60/30/10', label: '基础型', desc: '基础60% 中等30% 难10%' },
   { value: '50/30/20', label: '标准型', desc: '基础50% 中等30% 难20%' },
   { value: 'custom', label: '自定义', desc: '自由调整难度配比' },
+]
+
+const BASIS_OPTIONS: { value: ContentBasis; label: string; desc: string }[] = [
+  { value: 'upload', label: '上传资料优先', desc: '真题、讲义、教材目录' },
+  { value: 'bank', label: '题库知识点', desc: '按已整理标签命题' },
+  { value: 'mixed', label: '资料 + 题库', desc: '两类依据同时参考' },
 ]
 
 const OUTPUT_FORMATS: { value: SessionConfig['outputFormat']; label: string }[] = [
@@ -29,6 +38,9 @@ function presetToDifficulty(preset: DifficultyPreset): string {
 export interface ConfigFormValues {
   course: string
   scope: string
+  contentBasis: ContentBasis
+  coverageItems: string[]
+  additionalRequirements: string
   difficulty: string
   nSets: number
   outputFormat: SessionConfig['outputFormat']
@@ -41,6 +53,9 @@ interface ConfigFormProps {
 }
 
 export default function ConfigForm({ onChange, values }: ConfigFormProps) {
+  const questions = useQuestionStore(s => s.questions)
+  const fetchQuestions = useQuestionStore(s => s.fetchQuestions)
+  const questionLoading = useQuestionStore(s => s.loading)
   const [preset, setPreset] = useState<DifficultyPreset>(() => {
     if (values.difficulty === '基础60% 中等30% 难10%') return '60/30/10'
     if (values.difficulty === '基础50% 中等30% 难20%') return '50/30/20'
@@ -50,6 +65,16 @@ export default function ConfigForm({ onChange, values }: ConfigFormProps) {
   const [customEasy, setCustomEasy] = useState(60)
   const [customMedium, setCustomMedium] = useState(30)
   const [customHard, setCustomHard] = useState(10)
+
+  useEffect(() => {
+    if (questions.length === 0) fetchQuestions()
+  }, [fetchQuestions])
+
+  const candidateKnowledgePoints = useMemo(() => {
+    const set = new Set<string>()
+    questions.forEach((question) => question.knowledgePoints.forEach((kp) => { if (kp.trim()) set.add(kp.trim()) }))
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh-CN')).slice(0, 18)
+  }, [questions])
 
   const update = useCallback(
     (patch: Partial<ConfigFormValues>) => {
@@ -94,6 +119,11 @@ export default function ConfigForm({ onChange, values }: ConfigFormProps) {
     [update, customEasy, customMedium, customHard],
   )
 
+  const toggleCoverageItem = (item: string) => {
+    const current = values.coverageItems || []
+    update({ coverageItems: current.includes(item) ? current.filter((kp) => kp !== item) : [...current, item] })
+  }
+
   return (
     <div className="space-y-5">
       {/* Course name */}
@@ -108,17 +138,75 @@ export default function ConfigForm({ onChange, values }: ConfigFormProps) {
         />
       </div>
 
-      {/* Scope */}
+      {/* Basis */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">考试范围（可选）</label>
-        <input
-          type="text"
-          value={values.scope}
-          onChange={(e) => update({ scope: e.target.value })}
-          placeholder="如：第一章至第三章"
-          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"
+        <label className="block text-sm font-medium text-gray-700 mb-2">命题依据</label>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          {BASIS_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => update({ contentBasis: option.value })}
+              className={`px-3 py-2 rounded-lg text-sm border transition-colors text-left ${
+                values.contentBasis === option.value
+                  ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                  : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+              }`}
+            >
+              <div className="font-medium">{option.label}</div>
+              <div className="text-xs mt-0.5 opacity-80">{option.desc}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Coverage */}
+      <div>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <label className="block text-sm font-medium text-gray-700">覆盖内容</label>
+          <span className="text-xs text-gray-400">已选 {values.coverageItems.length}</span>
+        </div>
+        {candidateKnowledgePoints.length > 0 ? (
+          <div className="flex flex-wrap gap-2 mb-2">
+            {candidateKnowledgePoints.map((kp) => {
+              const selected = values.coverageItems.includes(kp)
+              return (
+                <button
+                  key={kp}
+                  type="button"
+                  onClick={() => toggleCoverageItem(kp)}
+                  className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
+                    selected
+                      ? 'bg-indigo-50 border-indigo-300 text-indigo-700'
+                      : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {kp}
+                </button>
+              )
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-gray-400 mb-2">{questionLoading ? '知识点加载中...' : '题库暂无知识点'}</p>
+        )}
+        <TagInput
+          tags={values.coverageItems}
+          onChange={(coverageItems) => update({ coverageItems })}
+          placeholder="手动添加知识点，如：矩阵的秩"
         />
       </div>
+
+      <details className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
+        <summary className="cursor-pointer text-sm font-medium text-gray-700">高级设置</summary>
+        <label className="block text-sm font-medium text-gray-700 mt-3 mb-1">补充要求</label>
+        <textarea
+          value={values.additionalRequirements}
+          onChange={(e) => update({ additionalRequirements: e.target.value })}
+          placeholder="如：只考第二章矩阵；不要行列式计算；偏重证明题"
+          rows={3}
+          className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none resize-none bg-white"
+        />
+      </details>
 
       {/* Difficulty preset */}
       <div>

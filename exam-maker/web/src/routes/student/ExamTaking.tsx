@@ -1,8 +1,24 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
+import LatexRenderer from '../../components/shared/LatexRenderer'
 
 const API = 'http://localhost:3001'
+
+function countFillBlankMarkers(text: string): number {
+  const commandBlanks = (text.match(/\\(?:underline|blank|fillin)\s*(?:\{[^}]*\})?/g) || []).length
+  const lineBlanks = (text.match(/(?:_{2,}|＿{2,}|-{4,}|—{2,}|…{2,})/g) || []).length
+  return commandBlanks + lineBlanks
+}
+
+function inferQuestionBlankCount(question: any): number {
+  const explicitCount = countFillBlankMarkers([question?.title, question?.content].map((item) => String(item || '')).join('\n'))
+  if (explicitCount > 0) return explicitCount
+  const apiCount = Number(question?.blankCount)
+  if (Number.isFinite(apiCount) && apiCount > 0) return Math.floor(apiCount)
+  const answerCount = Array.isArray(question?.answer?.blanks) ? question.answer.blanks.length : 0
+  return Math.max(1, answerCount || 1)
+}
 
 export default function ExamTaking() {
   const { publishId } = useParams<{ publishId: string }>()
@@ -19,12 +35,17 @@ export default function ExamTaking() {
   const [timeLeft, setTimeLeft] = useState(0)
   const [violations, setViolations] = useState(0)
   const [submitting, setSubmitting] = useState(false)
+  const [loadError, setLoadError] = useState('')
   const timerRef = useRef<any>(null)
 
   // Load exam
   useEffect(() => {
     fetch(`${API}/api/student/exam/${publishId}`, { headers })
       .then(r => r.json()).then(d => {
+        if (d.error) {
+          setLoadError(d.error)
+          return
+        }
         setQuestions(d.questions || [])
         setPublish(d.publish)
         setTimeLeft((d.publish?.duration || 0) * 60)
@@ -33,6 +54,7 @@ export default function ExamTaking() {
 
   // Timer
   useEffect(() => {
+    if (!publish) return
     timerRef.current = setInterval(() => {
       setTimeLeft((t: number) => {
         if (t <= 1) { clearInterval(timerRef.current); handleSubmit(); return 0 }
@@ -40,23 +62,39 @@ export default function ExamTaking() {
       })
     }, 1000)
     return () => clearInterval(timerRef.current)
-  }, [])
+  }, [publish?.id])
+
+  const reportViolation = (type: string) => {
+    if (!publish || publish.antiCheatLevel === 'off' || !submissionId) return
+    setViolations((current) => {
+      const next = current + 1
+      fetch(API + '/api/student/exam/' + publishId + '/events', {
+        method: 'POST', headers,
+        body: JSON.stringify({ submissionId, type, violations: next, detail: { at: Date.now() } }),
+      }).then(r => r.json()).then(d => {
+        if (d.shouldSubmit) handleSubmit(next)
+      }).catch(() => {})
+      return next
+    })
+  }
 
   // Fullscreen
   useEffect(() => {
+    if (!publish || publish.antiCheatLevel === 'off') return
     const fullscreen = document.documentElement.requestFullscreen
     if (fullscreen) fullscreen().catch(() => {})
-    const onFullscreenChange = () => { if (!document.fullscreenElement) setViolations(v => v + 1) }
+    const onFullscreenChange = () => { if (!document.fullscreenElement) reportViolation('fullscreen_exit') }
     document.addEventListener('fullscreenchange', onFullscreenChange)
     return () => document.removeEventListener('fullscreenchange', onFullscreenChange)
-  }, [])
+  }, [publish?.antiCheatLevel, submissionId])
 
   // Visibility (tab switch) detection
   useEffect(() => {
-    const onVisibility = () => { if (document.hidden) setViolations(v => v + 1) }
+    if (!publish || publish.antiCheatLevel === 'off') return
+    const onVisibility = () => { if (document.hidden) reportViolation('tab_hidden') }
     document.addEventListener('visibilitychange', onVisibility)
     return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [])
+  }, [publish?.antiCheatLevel, submissionId])
 
   const saveAnswer = useCallback(async (qId: string, order: number, ans: any, maxScore: number) => {
     setAnswers(prev => ({ ...prev, [qId]: ans }))
@@ -66,41 +104,43 @@ export default function ExamTaking() {
     })
   }, [publishId, submissionId])
 
-  const handleSubmit = async () => {
+  async function handleSubmit(finalViolations = violations) {
     if (submitting) return
     setSubmitting(true)
     clearInterval(timerRef.current)
     await fetch(`${API}/api/student/exam/${publishId}/submit`, {
       method: 'POST', headers,
-      body: JSON.stringify({ submissionId, violations }),
+      body: JSON.stringify({ submissionId, violations: finalViolations }),
     })
     document.exitFullscreen?.()
     navigate(`/student/submission/${submissionId}`)
   }
 
+  if (loadError) return <div className="text-center py-24 text-gray-400">{loadError}</div>
   if (questions.length === 0) return <div className="text-center py-24 text-gray-400">加载试卷...</div>
 
   const q = questions[currentIdx]
+  const fillBlankCount = q.type === 'fillblank' ? inferQuestionBlankCount(q) : 0
   const answeredCount = Object.keys(answers).length
   const fmtTime = `${Math.floor(timeLeft / 60)}:${String(timeLeft % 60).padStart(2, '0')}`
 
   return (
-    <div className="fixed inset-0 bg-gray-100 flex flex-col">
+    <div className="fixed inset-0 bg-gray-100 flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="bg-white border-b px-6 py-3 flex items-center justify-between">
+      <div className="bg-white border-b px-6 py-3 flex items-center justify-between flex-shrink-0">
         <span className="font-semibold">{publish?.title}</span>
         <div className="flex items-center gap-4">
           <span className="text-sm text-gray-500">{answeredCount}/{questions.length} 已答</span>
           <span className={`font-mono font-bold ${timeLeft < 300 ? 'text-red-600' : 'text-gray-700'}`}>{fmtTime}</span>
-          {violations > 0 && <span className="text-xs text-red-500">违规: {violations}次</span>}
-          <button onClick={handleSubmit} disabled={submitting} className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-sm">{submitting ? '提交中...' : '交卷'}</button>
+          {publish?.antiCheatLevel !== 'off' && violations > 0 && <span className="text-xs text-red-500">异常: {violations}/{publish?.maxViolations || 3}</span>}
+          <button onClick={() => handleSubmit()} disabled={submitting} className="px-4 py-1.5 bg-red-500 text-white rounded-lg text-sm">{submitting ? '提交中...' : '交卷'}</button>
         </div>
       </div>
 
       {/* Body */}
-      <div className="flex-1 flex">
+      <div className="flex-1 min-h-0 flex overflow-hidden">
         {/* Sidebar */}
-        <div className="w-64 bg-white border-r p-4 overflow-y-auto">
+        <div className="w-64 flex-shrink-0 bg-white border-r p-4 overflow-y-auto">
           <div className="grid grid-cols-4 gap-2">
             {questions.map((q, i) => (
               <button key={i} onClick={() => setCurrentIdx(i)} className={`w-12 h-12 rounded-lg text-sm font-medium ${
@@ -114,27 +154,28 @@ export default function ExamTaking() {
         </div>
 
         {/* Question */}
-        <div className="flex-1 p-8 overflow-y-auto">
-          <div className="max-w-3xl mx-auto bg-white rounded-xl border p-8">
+        <div className="flex-1 min-w-0 min-h-0 p-8 overflow-y-auto">
+          <div className="w-full max-w-3xl mx-auto bg-white rounded-xl border p-8 overflow-visible">
             <div className="flex items-center gap-2 mb-4">
               <span className="text-sm font-bold text-indigo-600">第 {currentIdx + 1} 题</span>
               <span className="text-sm text-gray-400">({q.score} 分)</span>
             </div>
-            <h3 className="text-lg font-semibold mb-4">{q.title}</h3>
-            <p className="text-gray-700 mb-6">{q.content}</p>
+            <LatexRenderer content={q.title} className="student-exam-latex text-lg font-semibold text-gray-900 mb-4" />
+            <LatexRenderer content={q.content} className="student-exam-latex text-gray-700 mb-6" />
 
             {/* Choice */}
             {q.type === 'choice' && q.options && (
               <div className="space-y-3">
                 {q.options.map((opt: any) => (
-                  <label key={opt.id} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer ${
+                  <label key={opt.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer ${
                     answers[q.id]?.selectedOptionId === opt.id ? 'border-indigo-300 bg-indigo-50' : 'border-gray-200'
                   }`}>
                     <input type="radio" name={`q-${q.id}`} checked={answers[q.id]?.selectedOptionId === opt.id}
                       onChange={() => saveAnswer(q.id, currentIdx + 1, { type: 'choice', selectedOptionId: opt.id }, q.score)}
+                      className="mt-1 flex-shrink-0"
                     />
-                    <span className="font-medium text-gray-500">{opt.label}.</span>
-                    <span>{opt.content}</span>
+                    <span className="font-medium text-gray-500 flex-shrink-0">{opt.label}.</span>
+                    <LatexRenderer content={opt.content} className="student-exam-latex min-w-0 flex-1" />
                   </label>
                 ))}
               </div>
@@ -160,14 +201,15 @@ export default function ExamTaking() {
             {/* Fill blank */}
             {q.type === 'fillblank' && (
               <div className="space-y-3">
-                {[0, 1, 2, 3].map(i => (
+                {Array.from({ length: fillBlankCount }, (_, i) => i).map(i => (
                   <input key={i} value={answers[q.id]?.blanks?.[i] || ''}
                     onChange={e => {
-                      const blanks = [...(answers[q.id]?.blanks || [])]
+                      const currentBlanks = answers[q.id]?.blanks || []
+                      const blanks = Array.from({ length: fillBlankCount }, (_, idx) => currentBlanks[idx] || '')
                       blanks[i] = e.target.value
                       saveAnswer(q.id, currentIdx + 1, { type: 'fillblank', blanks }, q.score)
                     }}
-                    placeholder={`空格 ${i + 1}`}
+                    placeholder={fillBlankCount === 1 ? '答案' : '空格 ' + (i + 1)}
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-200"
                   />
                 ))}

@@ -52,19 +52,18 @@ export async function sessionRoutes(app: FastifyInstance) {
     const { id } = req.params as { id: string }
     const session = await getSession(id)
     if (!session) return reply.status(404).send({ error: 'Session not found' })
-    // Only owner can view
-    if (session.teacherId && session.teacherId !== req.user!.userId) {
+    if (session.teacherId !== req.user!.userId) {
       return reply.status(404).send({ error: 'Session not found' })
     }
     return session
   })
 
   // DELETE
-  app.delete('/api/sessions/:id', auth, async (req) => {
+  app.delete('/api/sessions/:id', auth, async (req, reply) => {
     const { id } = req.params as { id: string }
     const session = await getSession(id)
-    if (session?.teacherId && session.teacherId !== req.user!.userId) {
-      return { ok: false }
+    if (!session || session.teacherId !== req.user!.userId) {
+      return reply.status(404).send({ error: 'Session not found' })
     }
     await deleteSession(id)
     return { ok: true }

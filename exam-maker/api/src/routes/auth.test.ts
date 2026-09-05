@@ -34,6 +34,16 @@ describe('POST /api/auth/register', () => {
       payload: { email: 't@test.com', password: '123456', name: 'Dup', role: 'teacher' },
     })
     expect(res.statusCode).toBe(409)
+    expect(body(res).error).toBe('该邮箱已被注册')
+  })
+
+  it('rejects duplicate username', async () => {
+    const res = await app.inject({
+      method: 'POST', url: '/api/auth/register',
+      payload: { email: 'teacher-alias@test.com', password: '123456', name: 'Teacher', role: 'teacher' },
+    })
+    expect(res.statusCode).toBe(409)
+    expect(body(res).error).toBe('该用户名已被注册')
   })
 
   it('rejects short password', async () => {
@@ -57,7 +67,7 @@ describe('POST /api/auth/login', () => {
   it('logs in with correct credentials', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/auth/login',
-      payload: { email: 't@test.com', password: '123456' },
+      payload: { username: 'Teacher', password: '123456' },
     })
     expect(res.statusCode).toBe(200)
     expect(body(res).token).toBeDefined()
@@ -67,15 +77,15 @@ describe('POST /api/auth/login', () => {
   it('rejects wrong password', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/auth/login',
-      payload: { email: 't@test.com', password: 'wrong' },
+      payload: { username: 'Teacher', password: 'wrong' },
     })
     expect(res.statusCode).toBe(401)
   })
 
-  it('rejects unknown email', async () => {
+  it('rejects unknown username', async () => {
     const res = await app.inject({
       method: 'POST', url: '/api/auth/login',
-      payload: { email: 'nobody@test.com', password: '123456' },
+      payload: { username: 'Nobody', password: '123456' },
     })
     expect(res.statusCode).toBe(401)
   })
@@ -85,7 +95,7 @@ describe('GET /api/auth/me', () => {
   it('returns user with valid token', async () => {
     const login = await app.inject({
       method: 'POST', url: '/api/auth/login',
-      payload: { email: 't@test.com', password: '123456' },
+      payload: { username: 'Teacher', password: '123456' },
     })
     const token = body(login).token
     const res = await app.inject({

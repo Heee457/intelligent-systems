@@ -17,15 +17,22 @@ function sanitizeUser(row: Record<string, unknown>) {
   return user
 }
 
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
 export async function authRoutes(app: FastifyInstance) {
   // Register
   app.post('/api/auth/register', async (req, reply) => {
-    const { email, password, name, role } = req.body as {
+    const body = req.body as {
       email: string; password: string; name: string; role: string
     }
+    const email = normalizeText(body.email)
+    const name = normalizeText(body.name)
+    const { password, role } = body
 
     if (!email || !password || !name) {
-      return reply.status(400).send({ error: '邮箱、密码、姓名为必填项' })
+      return reply.status(400).send({ error: '用户名、邮箱、密码为必填项' })
     }
     if (!['teacher', 'student'].includes(role)) {
       return reply.status(400).send({ error: '角色必须是 teacher 或 student' })
@@ -38,6 +45,10 @@ export async function authRoutes(app: FastifyInstance) {
     const existing = db.prepare('SELECT id FROM users WHERE email = ?').get(email)
     if (existing) {
       return reply.status(409).send({ error: '该邮箱已被注册' })
+    }
+    const existingName = db.prepare('SELECT id FROM users WHERE name = ?').get(name)
+    if (existingName) {
+      return reply.status(409).send({ error: '该用户名已被注册' })
     }
 
     const now = Date.now()
@@ -57,21 +68,27 @@ export async function authRoutes(app: FastifyInstance) {
 
   // Login
   app.post('/api/auth/login', async (req, reply) => {
-    const { email, password } = req.body as { email: string; password: string }
+    const body = req.body as { username?: string; password?: string }
+    const username = normalizeText(body.username)
+    const { password } = body
 
-    if (!email || !password) {
-      return reply.status(400).send({ error: '邮箱和密码为必填项' })
+    if (!username || !password) {
+      return reply.status(400).send({ error: '用户名和密码为必填项' })
     }
 
     const db = getDb()
-    const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as Record<string, unknown> | undefined
+    const users = db.prepare('SELECT * FROM users WHERE name = ?').all(username) as Record<string, unknown>[]
+    if (users.length > 1) {
+      return reply.status(409).send({ error: '该用户名存在重复，请联系管理员处理' })
+    }
+    const user = users[0]
     if (!user) {
-      return reply.status(401).send({ error: '邮箱或密码错误' })
+      return reply.status(401).send({ error: '用户名或密码错误' })
     }
 
     const valid = await bcrypt.compare(password, user.password as string)
     if (!valid) {
-      return reply.status(401).send({ error: '邮箱或密码错误' })
+      return reply.status(401).send({ error: '用户名或密码错误' })
     }
 
     const token = signToken(user.id as string, user.role as string)

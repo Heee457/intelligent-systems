@@ -32,6 +32,27 @@ function formatDate(ts: number): string {
   return new Date(ts).toLocaleString('zh-CN')
 }
 
+function SessionConfigSummary({ session }: { session: Session }) {
+  const coverage = session.config.coverageItems || []
+  const extra = session.config.additionalRequirements
+  if (coverage.length > 0 || extra) {
+    return (
+      <div className="mt-1 space-y-1">
+        {coverage.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {coverage.slice(0, 3).map((item) => (
+              <span key={item} className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600">{item}</span>
+            ))}
+            {coverage.length > 3 && <span className="text-xs text-gray-400">+{coverage.length - 3}</span>}
+          </div>
+        )}
+        {extra && <p className="text-xs text-gray-400 line-clamp-1">{extra}</p>}
+      </div>
+    )
+  }
+  return session.config.scope ? <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{session.config.scope}</p> : null
+}
+
 export default function SessionList() {
   const navigate = useNavigate()
   const [sessions, setSessions] = useState<Session[]>([])
@@ -111,9 +132,7 @@ export default function SessionList() {
               <h3 className="font-semibold text-gray-900">
                 {session.config.course || '未命名课程'}
               </h3>
-              {session.config.scope && (
-                <p className="text-xs text-gray-400 mt-0.5">{session.config.scope}</p>
-              )}
+              <SessionConfigSummary session={session} />
             </div>
             <span
               className={`text-xs px-2 py-0.5 rounded-full font-medium ${STATUS_STYLES[session.status] || 'bg-gray-100 text-gray-600'}`}

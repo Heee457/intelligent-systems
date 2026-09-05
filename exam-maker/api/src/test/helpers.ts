@@ -11,6 +11,7 @@ import { studentRoutes } from '../routes/student'
 import { statsRoutes } from '../routes/stats'
 import { exportRoutes } from '../routes/export'
 import { variantRoutes } from '../routes/variant'
+import { sessionRoutes } from '../routes/sessions'
 
 const TEST_ROOT = process.env.EXAM_DATA_ROOT || '/tmp/exam-maker-test'
 
@@ -30,6 +31,7 @@ export function createApp() {
   beforeAll(async () => {
     await app!.register(cors, { origin: '*' })
     await app!.register(authRoutes)
+    await app!.register(sessionRoutes)
     await app!.register(questionRoutes)
     await app!.register(examRoutes)
     await app!.register(classRoutes)
@@ -44,13 +46,13 @@ export function createApp() {
     await app!.inject({ method: 'POST', url: '/api/auth/register',
       payload: { email: '__teacher@test', password: 'test123', name: 'T', role: 'teacher' } })
     const tLogin = await app!.inject({ method: 'POST', url: '/api/auth/login',
-      payload: { email: '__teacher@test', password: 'test123' } })
+      payload: { username: 'T', password: 'test123' } })
     _teacherToken = JSON.parse(tLogin.body).token
 
     await app!.inject({ method: 'POST', url: '/api/auth/register',
       payload: { email: '__student@test', password: 'test123', name: 'S', role: 'student' } })
     const sLogin = await app!.inject({ method: 'POST', url: '/api/auth/login',
-      payload: { email: '__student@test', password: 'test123' } })
+      payload: { username: 'S', password: 'test123' } })
     _studentToken = JSON.parse(sLogin.body).token
   })
 

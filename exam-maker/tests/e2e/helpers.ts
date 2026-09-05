@@ -2,9 +2,17 @@ import { expect, type Page } from '@playwright/test'
 
 export const testPassword = 'E2E-pass-123'
 
+function uniqueSuffix() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
 export function uniqueEmail(role: 'teacher' | 'student') {
-  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  return `e2e-${role}-${suffix}@example.com`
+  return `e2e-${role}-${uniqueSuffix()}@example.com`
+}
+
+export function uniqueUsername(role: 'teacher' | 'student', baseName?: string) {
+  const base = baseName?.trim() || `E2E ${role}`
+  return `${base} ${uniqueSuffix()}`
 }
 
 export async function registerUser(
@@ -12,14 +20,14 @@ export async function registerUser(
   role: 'teacher' | 'student',
   options: { name?: string; email?: string; password?: string } = {},
 ) {
-  const name = options.name ?? `E2E ${role}`
+  const name = uniqueUsername(role, options.name)
   const email = options.email ?? uniqueEmail(role)
   const password = options.password ?? testPassword
 
   await page.goto('/register')
   await expect(page.getByRole('heading', { name: '注册' })).toBeVisible()
 
-  await page.getByPlaceholder('请输入姓名').fill(name)
+  await page.getByPlaceholder('请输入用户名').fill(name)
   await page.getByPlaceholder('请输入邮箱').fill(email)
   await page.getByPlaceholder('至少 6 位').fill(password)
   await page.getByRole('button', { name: new RegExp(role === 'teacher' ? '教师' : '学生') }).click()
@@ -41,11 +49,11 @@ export async function expectStudentDashboard(page: Page) {
   await expect(page.getByPlaceholder('输入班级邀请码')).toBeVisible()
 }
 
-export async function loginUser(page: Page, email: string, password = testPassword) {
+export async function loginUser(page: Page, username: string, password = testPassword) {
   await page.goto('/login')
   await expect(page.getByRole('heading', { name: '登录' })).toBeVisible()
 
-  await page.getByPlaceholder('请输入邮箱').fill(email)
+  await page.getByPlaceholder('请输入用户名').fill(username)
   await page.getByPlaceholder('请输入密码').fill(password)
   await page.getByRole('button', { name: /^登录$/ }).click()
 }
@@ -102,22 +110,33 @@ export async function publishCurrentExam(
   page: Page,
   title: string,
   durationMinutes = '30',
-  options: { className?: string } = {},
+  options: { className?: string; scoreReleaseMode?: 'auto' | 'fixed'; scoreReleaseTime?: string } = {},
 ) {
   await page.getByRole('button', { name: '发布' }).click()
   await expect(page.getByRole('heading', { name: '发布试卷' })).toBeVisible()
 
-  await page.getByPlaceholder('发布标题').fill(title)
-  await page.getByPlaceholder('考试时长（分钟）').fill(durationMinutes)
+  const publishDialog = page.locator('.fixed').filter({ hasText: '发布试卷' })
+  await publishDialog.locator('input').nth(0).fill(title)
+  await publishDialog.locator('input').nth(1).fill(durationMinutes)
 
-  const scope = page.getByLabel('发布范围')
-  await expect(scope).toBeVisible()
-  if (options.className) {
-    await expect(scope.locator('option', { hasText: options.className })).toHaveCount(1)
-    await scope.selectOption({ label: options.className })
+  await expect(publishDialog.getByText('发布班级', { exact: true })).toBeVisible()
+  const targetClass = options.className
+    ? publishDialog.locator('label').filter({ hasText: options.className }).getByRole('checkbox')
+    : publishDialog.getByRole('checkbox').first()
+  await expect(targetClass).toBeVisible()
+  await targetClass.check()
+
+  await expect(publishDialog.getByText('成绩公布方式')).toBeVisible()
+  const autoScoreRelease = publishDialog.getByRole('radio', { name: '学生交卷后自动公布' })
+  const fixedScoreRelease = publishDialog.getByRole('radio', { name: '固定时间公布' })
+  await expect(autoScoreRelease).toBeChecked()
+  await expect(fixedScoreRelease).toBeVisible()
+  if (options.scoreReleaseMode === 'fixed') {
+    await fixedScoreRelease.check()
+    await publishDialog.locator('input[type="datetime-local"]').last().fill(options.scoreReleaseTime ?? '2026-08-16T20:00')
   }
 
-  await page.getByRole('button', { name: '确认发布' }).click()
+  await publishDialog.getByRole('button', { name: '确认发布' }).click()
 
   await expect(page.getByRole('button', { name: '取消发布' })).toBeVisible()
 }

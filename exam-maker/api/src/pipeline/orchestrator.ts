@@ -2,6 +2,8 @@ import type { SessionStatus, WsMessage } from '../../../shared/types/index'
 import type { PipelineContext, StepResult, ClaudeClient } from '../shared/types'
 import { updateSession, getSession } from '../session/store'
 import { handleWriteFile } from './tools'
+import { importGeneratedQuestions } from './bank-importer'
+import { syncGeneratedPapersToExams } from './exam-sync'
 import path from 'path'
 import { runStep0 } from './steps/step0-detect'
 import { runStep1 } from './steps/step1-parse'
@@ -71,7 +73,7 @@ export class PipelineOrchestrator {
     this.subscribers.get(sessionId)?.forEach((fn) => fn(msg))
   }
 
-  async start(sessionId: string, resumeFromStep: number = 0): Promise<void> {
+  async start(sessionId: string, resumeFromStep: number = 0, feedback?: string): Promise<void> {
     const session = await getSession(sessionId)
     if (!session) throw new Error('Session not found')
     if (!this.claudeClient) throw new Error('Claude client not configured')
@@ -83,6 +85,7 @@ export class PipelineOrchestrator {
       buildDir: session.buildDir,
       sendWs: (msg) => this.broadcast(sessionId, msg),
       claudeClient: this.claudeClient!,
+      feedback,
     }
 
     const stepsToRun = STEPS.slice(resumeFromStep)
@@ -120,22 +123,59 @@ export class PipelineOrchestrator {
         }
 
         // Handle confirmation point
-        if (step.requiresConfirm && step.confirmPoint && result.confirmData) {
+        if (step.requiresConfirm && step.confirmPoint) {
           const nextStatus = STATUS_AFTER_STEP[step.index]
+
+          // Ensure we always have a valid confirmData payload
+          const safeConfirmData = result.confirmData || {
+            content: '',
+            type: step.confirmPoint,
+            summary: `${step.name}已完成`,
+          }
 
           // Persist confirmData to file so frontend can fetch it on page load
           const confirmFile = `confirm-${step.confirmPoint}.json`
           await handleWriteFile(
             path.join(ctx.buildDir, '..'),
             confirmFile,
-            JSON.stringify(result.confirmData, null, 2),
+            JSON.stringify(safeConfirmData, null, 2),
           )
 
-          await updateSession(sessionId, { status: nextStatus, stepDetail: `待确认: ${step.name}` })
+          // Build session patch — include papers if this is the selection confirm
+          const sessionPatch: Partial<import('../../../shared/types/index').Session> = {
+            status: nextStatus,
+            stepDetail: `待确认: ${step.name}`,
+          }
+          if (step.confirmPoint === 'selection' && Array.isArray(safeConfirmData)) {
+            sessionPatch.papers = safeConfirmData as import('../../../shared/types/index').PaperData[]
+            try {
+              const importResult = await importGeneratedQuestions(ctx.buildDir, session.teacherId)
+              this.broadcast(sessionId, {
+                type: 'log',
+                message: `题库自动同步：新增 ${importResult.imported} 道，跳过重复 ${importResult.skipped} 道`,
+              })
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              this.broadcast(sessionId, { type: 'log', message: `题库自动同步失败：${message}` })
+            }
+
+            try {
+              const examSync = await syncGeneratedPapersToExams({ ...session, papers: sessionPatch.papers }, [])
+              this.broadcast(sessionId, {
+                type: 'log',
+                message: `试卷管理自动同步：新增 ${examSync.created} 份，更新 ${examSync.updated} 份，推荐第 ${examSync.recommended.join('、') || '1'} 套`,
+              })
+            } catch (error) {
+              const message = error instanceof Error ? error.message : String(error)
+              this.broadcast(sessionId, { type: 'log', message: `试卷管理自动同步失败：${message}` })
+            }
+          }
+
+          await updateSession(sessionId, sessionPatch)
           this.broadcast(sessionId, {
             type: 'confirm',
             point: step.confirmPoint,
-            data: result.confirmData,
+            data: safeConfirmData,
           })
           return // Pause — wait for confirm call
         }
@@ -171,19 +211,49 @@ export class PipelineOrchestrator {
     _point: 'blueprint' | 'template' | 'selection',
     action: 'approve' | 'reject' | 'modify',
     feedback?: string,
+    modifications?: unknown,
   ): Promise<void> {
     const session = await getSession(sessionId)
     if (!session) throw new Error('Session not found')
 
     if (action === 'approve') {
+      if (_point === 'selection') {
+        const selectedPaperIndexes = modifications && typeof modifications === 'object' && Array.isArray((modifications as Record<string, unknown>).selectedPaperIndexes)
+          ? ((modifications as Record<string, unknown>).selectedPaperIndexes as unknown[]).map((value) => Number(value)).filter((value) => Number.isFinite(value))
+          : []
+        const selectedSet = new Set(selectedPaperIndexes)
+        const fallbackIndex = session.papers[0]?.index ?? 1
+        const effectiveSelected = selectedSet.size > 0 ? selectedSet : new Set([fallbackIndex])
+        const papers = session.papers.map((paper) => ({ ...paper, selected: effectiveSelected.has(paper.index) }))
+        const updatedSession = await updateSession(sessionId, { papers })
+        try {
+          const examSync = await syncGeneratedPapersToExams(updatedSession || { ...session, papers }, Array.from(effectiveSelected))
+          this.broadcast(sessionId, {
+            type: 'log',
+            message: `试卷管理推荐标记已更新：第 ${examSync.recommended.join('、') || fallbackIndex} 套`,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          this.broadcast(sessionId, { type: 'log', message: `试卷管理推荐标记更新失败：${message}` })
+        }
+      }
+
       // Continue from next step
       await updateSession(sessionId, { status: 'RUNNING' })
       const nextStep = session.currentStep + 1
       await this.start(sessionId, nextStep)
-    } else if (action === 'reject' || action === 'modify') {
-      // Re-run current step from the beginning
-      await updateSession(sessionId, { status: 'RUNNING', stepDetail: `根据反馈重新执行: ${feedback || ''}` })
-      await this.start(sessionId, session.currentStep)
+    } else if (action === 'reject') {
+      // Re-run current step with rejection feedback
+      const fb = feedback || '用户驳回，请重新审查'
+      await updateSession(sessionId, { status: 'RUNNING', stepDetail: `驳回重新执行: ${fb}` })
+      this.broadcast(sessionId, { type: 'log', message: `⏪ 驳回 — 重新执行步骤 ${session.currentStep}` })
+      await this.start(sessionId, session.currentStep, fb)
+    } else if (action === 'modify') {
+      // Re-run current step with modification instructions
+      const fb = feedback || '用户请求修改'
+      await updateSession(sessionId, { status: 'RUNNING', stepDetail: `按修改意见重新执行: ${fb}` })
+      this.broadcast(sessionId, { type: 'log', message: `✏️ 修改 — 根据意见重新执行步骤 ${session.currentStep}: ${fb}` })
+      await this.start(sessionId, session.currentStep, fb)
     }
   }
 

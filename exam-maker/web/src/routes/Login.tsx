@@ -5,13 +5,13 @@ import { useAuthStore } from '../store/authStore'
 export default function Login() {
   const navigate = useNavigate()
   const { login, loading, error, clearError } = useAuthStore()
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     try {
-      await login(email, password)
+      await login(username, password)
       const role = useAuthStore.getState().user?.role
       navigate(role === 'teacher' ? '/' : '/student/dashboard')
     } catch { /* error is set in store */ }
@@ -30,13 +30,14 @@ export default function Login() {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">邮箱</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"
-            placeholder="请输入邮箱"
+            placeholder="请输入用户名"
             required
           />
         </div>
@@ -45,6 +46,7 @@ export default function Login() {
           <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
           <input
             type="password"
+            autoComplete="current-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400 outline-none"

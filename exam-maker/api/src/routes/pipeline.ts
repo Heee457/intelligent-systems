@@ -18,13 +18,14 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
   app.post('/api/sessions/:id/confirm', async (req, _reply) => {
     const { id } = req.params as { id: string }
-    const { action, point, feedback } = req.body as {
+    const { action, point, feedback, modifications } = req.body as {
       action: 'approve' | 'reject' | 'modify'
       point: 'blueprint' | 'template' | 'selection'
       feedback?: string
+      modifications?: unknown
     }
 
-    await orchestrator.confirm(id, point, action, feedback)
+    await orchestrator.confirm(id, point, action, feedback, modifications)
     return { ok: true }
   })
 

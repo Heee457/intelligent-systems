@@ -5,3 +5,56 @@
 body {
   @apply bg-gray-50 text-gray-900 min-h-screen;
 }
+
+.latex-renderer {
+  max-width: 100%;
+  min-width: 0;
+  white-space: pre-wrap;
+  line-height: 1.75;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.latex-renderer .latex-display,
+.latex-renderer .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.latex-renderer .katex-display {
+  margin: 0.65rem 0;
+  padding: 0.1rem 0;
+}
+
+.latex-renderer .latex-inline {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+}
+
+.latex-renderer .latex-inline .katex {
+  white-space: nowrap;
+}
+
+.latex-renderer .katex {
+  font-size: 1.04em;
+}
+
+.student-exam-latex .latex-display,
+.student-exam-latex .katex-display,
+.student-exam-latex .latex-inline {
+  overflow: visible;
+}
+
+.student-exam-latex .latex-inline {
+  display: inline;
+  max-width: none;
+  vertical-align: baseline;
+}
+
+.student-exam-latex .latex-inline .katex {
+  white-space: normal;
+}

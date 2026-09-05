@@ -5,7 +5,8 @@ test.describe('AI generation session', () => {
   test('creates a session from the dashboard without invoking the external AI pipeline', async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     const course = `E2E 智能系统 ${suffix}`
-    const scope = '监督学习基础'
+    const coverage = '监督学习基础'
+    const extra = '偏重概念辨析'
 
     await page.route('**/api/sessions/*/start', async (route) => {
       await route.fulfill({
@@ -19,7 +20,13 @@ test.describe('AI generation session', () => {
     await expectTeacherDashboard(page)
 
     await page.getByPlaceholder('如：高等数学').fill(course)
-    await page.getByPlaceholder('如：第一章至第三章').fill(scope)
+    await expect(page.getByText('考试范围（可选）')).not.toBeVisible()
+    await expect(page.getByText('命题依据')).toBeVisible()
+    await expect(page.getByText('覆盖内容')).toBeVisible()
+    await page.getByPlaceholder('手动添加知识点，如：矩阵的秩').fill(coverage)
+    await page.keyboard.press('Enter')
+    await page.getByText('高级设置').click()
+    await page.getByPlaceholder('如：只考第二章矩阵；不要行列式计算；偏重证明题').fill(extra)
     await page.locator('select').first().selectOption('1')
     await page.locator('input[type="file"]').setInputFiles({
       name: 'sample.pdf',
@@ -32,9 +39,11 @@ test.describe('AI generation session', () => {
 
     await expect(page).toHaveURL(/\/session\/.+/)
     await expect(page.getByRole('heading', { name: course })).toBeVisible()
-    await expect(page.getByText(scope)).toBeVisible()
+    await expect(page.getByText(coverage)).toBeVisible()
+    await expect(page.getByText(extra)).toBeVisible()
     await expect(page.getByText('1 套')).toBeVisible()
-    await expect(page.getByText('已创建')).toBeVisible()
+    await expect(page.locator('main').getByText(/已创建|运行中/)).toBeVisible()
+    await expect(page.getByText('等待启动')).toBeVisible()
     await expect(page.getByText('sample.pdf')).toBeVisible()
   })
 

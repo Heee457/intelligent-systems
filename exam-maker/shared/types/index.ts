@@ -42,6 +42,12 @@ export interface Question {
   difficulty: Difficulty
   knowledgePoints: string[] // 扁平标签
   explanation?: string // 解析
+  qualityIssues?: string[] // 质量检查问题
+  qualityCheckedAt?: number // 最近一次质量扫描时间
+  difficultySuggestion?: Difficulty // 基于作答数据的建议难度
+  difficultySuggestionReason?: string // 建议难度依据
+  isKeyQuestion?: boolean // 重点题
+  isErrorProne?: boolean // 易错题
   createdAt: number
   updatedAt: number
 }
@@ -59,6 +65,16 @@ export interface Exam {
   questions: ExamQuestion[]
   totalScore: number
   status: 'draft' | 'published'
+  source?: 'manual' | 'smart' | 'ai-session' | 'remedial' | 'retake'
+  sessionId?: string
+  paperIndex?: number
+  isRecommended?: boolean
+  scope?: string
+  knowledgePoints?: string[]
+  versionGroupId?: string
+  versionNumber?: number
+  parentExamId?: string
+  lockedAt?: number
   createdAt: number
   updatedAt: number
 }
@@ -76,6 +92,9 @@ export interface GenerationRule {
   name: string
   sections: RuleSection[]
   totalScore: number
+  scope?: string
+  knowledgePoints?: string[]
+  autoSupplement?: boolean
 }
 
 // —— 历史记录 ——
@@ -90,6 +109,9 @@ export interface HistoryEntry {
 export interface SessionConfig {
   course?: string
   scope?: string
+  contentBasis?: 'upload' | 'bank' | 'mixed'
+  coverageItems?: string[]
+  additionalRequirements?: string
   difficulty: string        // "基础60% 中等30% 难10%"
   nSets: number             // 默认 8
   outputFormat: 'latex' | 'docx' | 'md'
