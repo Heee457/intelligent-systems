@@ -1,0 +1,24 @@
+name: CI Practice
+
+on:
+  push:
+    branches: [ci-practice]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deliberate failure
+        run: |
+          echo "故意失败：练习查看日志"
+          exit 1
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Simulate deployment
+        run: echo "模拟部署成功"
