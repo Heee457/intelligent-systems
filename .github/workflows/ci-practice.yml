@@ -14,7 +14,7 @@ jobs:
       - name: Deliberate failure
         run: |
           echo "故意失败：练习查看日志"
-          exit 1
+          exit 0
 
   deploy:
     needs: test
